@@ -30,7 +30,7 @@ export function mapLegacyHabits(
     const createdAt = new Date(habit.createdAt)
     const isBoolean = habit.target === 1
     const trackingType: TrackingType = isBoolean ? 'BOOLEAN' : 'COUNT'
-    const scheduleType: HabitScheduleType = habit.frequency === 'daily' ? 'DAILY' : 'WEEKLY'
+    const scheduleType: HabitScheduleType = habit.frequency === 'daily' ? 'EVERY_DAY' : 'WEEKDAYS'
 
     return {
       legacySourceId: habit.id,
@@ -43,7 +43,7 @@ export function mapLegacyHabits(
       createdAt,
       schedule: {
         type: scheduleType,
-        weekdays: scheduleType === 'WEEKLY' ? [getWeekdayInTimeZone(createdAt, timezone)] : [],
+        weekdays: scheduleType === 'WEEKDAYS' ? [getWeekdayInTimeZone(createdAt, timezone)] : [],
         startDate: getDateKeyInTimeZone(createdAt, timezone)
       },
       entries: Array.from(new Set(habit.completions)).map((date) => ({

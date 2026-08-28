@@ -1,5 +1,5 @@
 export type TrackingType = 'BOOLEAN' | 'COUNT' | 'DURATION' | 'QUANTITY'
-export type HabitScheduleType = 'DAILY' | 'WEEKLY' | 'INTERVAL'
+export type HabitScheduleType = 'EVERY_DAY' | 'WEEKDAYS' | 'TIMES_PER_WEEK' | 'INTERVAL'
 export type HabitEntryStatus = 'PENDING' | 'PARTIAL' | 'COMPLETED' | 'SKIPPED' | 'MISSED'
 
 export interface HabitScheduleDto {

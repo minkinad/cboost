@@ -43,6 +43,42 @@ export function databaseDateToDateKey(value: Date): string {
   return value.toISOString().slice(0, 10)
 }
 
+export function addDaysToDateKey(value: string, amount: number): string {
+  const date = dateKeyToDatabaseDate(value)
+  date.setUTCDate(date.getUTCDate() + amount)
+  return databaseDateToDateKey(date)
+}
+
+export function dateKeyRange(startDate: string, endDate: string): string[] {
+  if (!isDateKey(startDate) || !isDateKey(endDate) || startDate > endDate) {
+    return []
+  }
+
+  const result: string[] = []
+
+  for (let current = startDate; current <= endDate; current = addDaysToDateKey(current, 1)) {
+    result.push(current)
+  }
+
+  return result
+}
+
+export function lastDateKeys(length: number, endDate: string): string[] {
+  if (!isDateKey(endDate)) {
+    throw new Error('Неверный формат календарной даты')
+  }
+
+  const safeLength = Math.max(0, Math.floor(length))
+  return Array.from({ length: safeLength }, (_, index) => addDaysToDateKey(endDate, index - safeLength + 1))
+}
+
+export function getIsoWeekDateKeys(date: string): string[] {
+  const day = dateKeyToDatabaseDate(date).getUTCDay()
+  const distanceFromMonday = day === 0 ? 6 : day - 1
+  const monday = addDaysToDateKey(date, -distanceFromMonday)
+  return Array.from({ length: 7 }, (_, index) => addDaysToDateKey(monday, index))
+}
+
 export function getDateKeyInTimeZone(date: Date, timezone: string): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone,

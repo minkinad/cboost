@@ -4,7 +4,7 @@ import { isDateKey } from '../utils/dates'
 const optionalText = (max: number) => z.string().trim().max(max).nullable().optional()
 
 export const trackingTypeSchema = z.enum(['BOOLEAN', 'COUNT', 'DURATION', 'QUANTITY'])
-export const habitScheduleTypeSchema = z.enum(['DAILY', 'WEEKLY', 'INTERVAL'])
+export const habitScheduleTypeSchema = z.enum(['EVERY_DAY', 'WEEKDAYS', 'TIMES_PER_WEEK', 'INTERVAL'])
 export const habitEntryStatusSchema = z.enum(['PENDING', 'PARTIAL', 'COMPLETED', 'SKIPPED', 'MISSED'])
 
 export const dateKeySchema = z
@@ -30,28 +30,28 @@ export const habitScheduleInputSchema = z
       context.addIssue({ code: 'custom', path: ['endDate'], message: 'Дата окончания раньше даты начала' })
     }
 
-    if (schedule.type === 'DAILY' && schedule.weekdays.length > 0) {
-      context.addIssue({ code: 'custom', path: ['weekdays'], message: 'DAILY не использует weekdays' })
+    if (schedule.type === 'EVERY_DAY' && schedule.weekdays.length > 0) {
+      context.addIssue({ code: 'custom', path: ['weekdays'], message: 'EVERY_DAY не использует weekdays' })
     }
 
-    if (schedule.type === 'DAILY' && (schedule.timesPerWeek != null || schedule.intervalDays != null)) {
-      context.addIssue({ code: 'custom', message: 'DAILY не использует timesPerWeek или intervalDays' })
+    if (schedule.type === 'EVERY_DAY' && (schedule.timesPerWeek != null || schedule.intervalDays != null)) {
+      context.addIssue({ code: 'custom', message: 'EVERY_DAY не использует timesPerWeek или intervalDays' })
     }
 
-    if (schedule.type === 'WEEKLY' && schedule.weekdays.length === 0 && !schedule.timesPerWeek) {
-      context.addIssue({
-        code: 'custom',
-        path: ['weekdays'],
-        message: 'WEEKLY требует weekdays или timesPerWeek'
-      })
+    if (schedule.type === 'WEEKDAYS' && schedule.weekdays.length === 0) {
+      context.addIssue({ code: 'custom', path: ['weekdays'], message: 'WEEKDAYS требует хотя бы один день' })
     }
 
-    if (schedule.type === 'WEEKLY' && schedule.weekdays.length > 0 && schedule.timesPerWeek != null) {
-      context.addIssue({ code: 'custom', message: 'WEEKLY использует weekdays или timesPerWeek, но не оба поля' })
+    if (schedule.type === 'WEEKDAYS' && (schedule.timesPerWeek != null || schedule.intervalDays != null)) {
+      context.addIssue({ code: 'custom', message: 'WEEKDAYS использует только weekdays' })
     }
 
-    if (schedule.type === 'WEEKLY' && schedule.intervalDays != null) {
-      context.addIssue({ code: 'custom', path: ['intervalDays'], message: 'WEEKLY не использует intervalDays' })
+    if (schedule.type === 'TIMES_PER_WEEK' && !schedule.timesPerWeek) {
+      context.addIssue({ code: 'custom', path: ['timesPerWeek'], message: 'TIMES_PER_WEEK требует timesPerWeek' })
+    }
+
+    if (schedule.type === 'TIMES_PER_WEEK' && (schedule.weekdays.length > 0 || schedule.intervalDays != null)) {
+      context.addIssue({ code: 'custom', message: 'TIMES_PER_WEEK не использует weekdays или intervalDays' })
     }
 
     if (schedule.type === 'INTERVAL' && !schedule.intervalDays) {
@@ -118,10 +118,16 @@ export const habitUpdateInputSchema = z
 export const habitEntryPutInputSchema = z
   .object({
     value: z.number().finite().min(0).max(999_999_999).nullable().optional(),
-    status: habitEntryStatusSchema.optional(),
+    completed: z.boolean().optional(),
+    status: z.literal('SKIPPED').optional(),
     note: optionalText(500)
   })
   .strict()
+  .superRefine((input, context) => {
+    if (input.status === 'SKIPPED' && (input.value != null || input.completed != null)) {
+      context.addIssue({ code: 'custom', message: 'SKIPPED не совмещается с value или completed' })
+    }
+  })
 
 export const habitIdParamsSchema = z.object({
   id: z.uuid()

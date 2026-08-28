@@ -1,7 +1,10 @@
 import type { HabitEntryPutInput } from '~~/shared/schemas/habits'
 import type { HabitDto, HabitEntryDto } from '~~/shared/types/habits'
-import { DomainRuleError, resolveEntryState } from '../../domain/habits/entry-rules'
-import { isScheduledOnDate } from '../../domain/habits/schedule-rules'
+import {
+  calculateEntryStatus,
+  canRecordEntryForDate,
+  HabitDomainError
+} from '~~/shared/domain/habits'
 import { ApplicationError } from '../../domain/errors'
 import type { HabitEntryRepository } from '../../repositories/habit-entry.repository'
 import type { HabitRepository } from '../../repositories/habit.repository'
@@ -23,7 +26,8 @@ export class HabitEntryService {
     userId: string,
     habitId: string,
     date: string,
-    input: HabitEntryPutInput
+    input: HabitEntryPutInput,
+    userToday?: string
   ): Promise<HabitEntryDto> {
     const habit = await this.requireHabit(userId, habitId)
 
@@ -31,12 +35,22 @@ export class HabitEntryService {
       throw new ApplicationError('Нельзя изменять записи архивной привычки', 409)
     }
 
-    if (!isScheduledOnDate(habit.schedule, date)) {
+    if (userToday && date > userToday) {
+      throw new ApplicationError('Нельзя записывать прогресс в будущем календарном дне', 422)
+    }
+
+    if (!canRecordEntryForDate(habit, date)) {
       throw new ApplicationError('Привычка не запланирована на выбранную дату', 422)
     }
 
     try {
-      const state = resolveEntryState(habit.trackingType, habit.targetValue, input)
+      const state = calculateEntryStatus({
+        trackingType: habit.trackingType,
+        targetValue: habit.targetValue,
+        value: input.value,
+        completed: input.completed,
+        explicitStatus: input.status
+      })
       return this.entries.upsert({
         habitId,
         date,
@@ -44,7 +58,7 @@ export class HabitEntryService {
         note: input.note ?? null
       })
     } catch (error) {
-      if (error instanceof DomainRuleError) {
+      if (error instanceof HabitDomainError) {
         throw new ApplicationError(error.message, 422)
       }
       throw error
