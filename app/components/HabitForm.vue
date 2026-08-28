@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import type { HabitCreateInput } from '~~/shared/types/tracker'
-import { HABIT_COLORS } from '~~/shared/utils/tracker'
+import { habitCreateInputSchema } from '~~/shared/schemas/habits'
+import type { HabitCreateInput } from '~~/shared/schemas/habits'
+import { getDateKey } from '~~/shared/utils/dates'
+import { DEFAULT_HABIT_COLOR, HABIT_COLORS } from '~~/shared/utils/tracker'
 
 const emit = defineEmits<{
   create: [payload: HabitCreateInput]
@@ -9,27 +11,37 @@ const emit = defineEmits<{
 const form = reactive({
   title: '',
   description: '',
-  frequency: 'daily' as const,
+  frequency: 'daily',
+  trackingType: 'BOOLEAN',
   target: 1,
   unit: 'раз',
-  color: HABIT_COLORS[0]
+  color: DEFAULT_HABIT_COLOR
 })
 
 function submit() {
-  const title = form.title.trim()
+  const numeric = form.trackingType !== 'BOOLEAN'
+  const result = habitCreateInputSchema.safeParse({
+    title: form.title,
+    description: form.description || null,
+    trackingType: form.trackingType,
+    targetValue: numeric ? form.target : null,
+    unit: numeric ? form.unit : null,
+    color: form.color,
+    schedule: {
+      type: form.frequency === 'daily' ? 'DAILY' : 'WEEKLY',
+      weekdays: [],
+      timesPerWeek: form.frequency === 'weekly' ? 1 : null,
+      intervalDays: null,
+      startDate: getDateKey(new Date()),
+      endDate: null
+    }
+  })
 
-  if (!title) {
+  if (!result.success) {
     return
   }
 
-  emit('create', {
-    title,
-    description: form.description,
-    frequency: form.frequency,
-    target: form.target,
-    unit: form.unit,
-    color: form.color
-  })
+  emit('create', result.data)
 
   form.title = ''
   form.description = ''
@@ -47,7 +59,7 @@ function submit() {
     <form class="habit-form" @submit.prevent="submit">
       <label>
         Название привычки
-        <input v-model="form.title" placeholder="Читать 30 минут" maxlength="80" required />
+        <input v-model="form.title" placeholder="Читать 30 минут" maxlength="80" required>
       </label>
 
       <label>
@@ -56,6 +68,16 @@ function submit() {
       </label>
 
       <div class="inline-grid">
+        <label>
+          Тип учёта
+          <select v-model="form.trackingType">
+            <option value="BOOLEAN">Да / нет</option>
+            <option value="COUNT">Количество</option>
+            <option value="DURATION">Длительность</option>
+            <option value="QUANTITY">Объём</option>
+          </select>
+        </label>
+
         <label>
           Частота
           <select v-model="form.frequency">
@@ -66,12 +88,12 @@ function submit() {
 
         <label>
           Цель
-          <input v-model.number="form.target" type="number" min="1" max="100" />
+          <input v-model.number="form.target" type="number" min="0.001" step="0.001" max="999999999" :disabled="form.trackingType === 'BOOLEAN'">
         </label>
 
         <label>
           Единица
-          <input v-model="form.unit" placeholder="раз" maxlength="20" />
+          <input v-model="form.unit" placeholder="раз" maxlength="20" :disabled="form.trackingType === 'BOOLEAN'">
         </label>
       </div>
 

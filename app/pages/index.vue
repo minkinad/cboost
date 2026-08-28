@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import type { HabitCreateInput } from '~~/shared/types/tracker'
+import type { HabitCreateInput } from '~~/shared/schemas/habits'
+
+const { user, fetch: refreshSession } = useUserSession()
 
 const {
   habits,
@@ -46,6 +48,12 @@ async function handleRemove(habitId: string) {
   await deleteHabit(habitId)
 }
 
+async function logout() {
+  await $fetch('/api/auth/logout', { method: 'POST' })
+  await refreshSession()
+  await navigateTo('/login')
+}
+
 onMounted(async () => {
   await init()
 
@@ -61,6 +69,10 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="page-shell">
+    <div class="account-bar">
+      <span>{{ user?.displayName || user?.email }}</span>
+      <button class="text-btn" type="button" @click="logout">Выйти</button>
+    </div>
     <HeaderHero
       :completed="todayProgress.completed"
       :expected="todayProgress.expected"

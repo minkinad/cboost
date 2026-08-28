@@ -1,62 +1,58 @@
-import type { Habit, HabitCreateInput } from '~~/shared/types/tracker'
-import { calculateStats, createHabit, getDateKey, isHabitDueOnDate, normalizeState, toggleCompletion } from '~~/shared/utils/tracker'
-
-type DataSource = 'local' | 'server'
+import type {
+  HabitEntryResponse,
+  HabitResponse,
+  HabitsResponse,
+  LegacyImportResponse
+} from '~~/shared/contracts/habits'
+import type { HabitCreateInput } from '~~/shared/schemas/habits'
+import type { HabitDto } from '~~/shared/types/habits'
+import type { Habit } from '~~/shared/types/tracker'
+import { getDateKey } from '~~/shared/utils/dates'
+import { calculateStats, isHabitDueOnDate, normalizeState } from '~~/shared/utils/tracker'
 
 const LOCAL_STORAGE_KEY = 'dailyboost.tracker.v1'
+const MIGRATED_AT_KEY = 'dailyboost.tracker.v1.migratedAt'
 
-interface HabitsResponse {
-  habits: Habit[]
-}
-
-function loadLocalHabits(): Habit[] {
+function loadLegacyHabits(): Habit[] {
   if (!import.meta.client) {
     return []
   }
 
   try {
     const raw = window.localStorage.getItem(LOCAL_STORAGE_KEY)
-
-    if (!raw) {
-      return []
-    }
-
-    const parsed = JSON.parse(raw)
-    return normalizeState(parsed).habits
+    return raw ? normalizeState(JSON.parse(raw)).habits : []
   } catch {
     return []
   }
 }
 
-function saveLocalHabits(habits: Habit[]): void {
-  if (!import.meta.client) {
-    return
+function toViewHabit(habit: HabitDto): Habit {
+  return {
+    id: habit.id,
+    title: habit.title,
+    description: habit.description ?? '',
+    frequency: habit.schedule.type === 'DAILY' ? 'daily' : 'weekly',
+    target: habit.targetValue ?? 1,
+    unit: habit.unit ?? 'выполнение',
+    color: habit.color ?? '#ff5c3d',
+    createdAt: habit.createdAt,
+    completions: (habit.entries ?? [])
+      .filter((entry) => entry.status === 'COMPLETED')
+      .map((entry) => entry.date)
   }
-
-  const state = normalizeState({
-    habits,
-    updatedAt: new Date().toISOString()
-  })
-
-  window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state))
 }
 
 export function useTracker() {
-  const config = useRuntimeConfig()
-
   const habits = useState<Habit[]>('tracker-habits', () => [])
-  const source = useState<DataSource>('tracker-source', () => 'local')
+  const source = useState<'server'>('tracker-source', () => 'server')
   const loading = useState<boolean>('tracker-loading', () => false)
   const ready = useState<boolean>('tracker-ready', () => false)
   const errorMessage = useState<string | null>('tracker-error-message', () => null)
 
   const stats = computed(() => calculateStats(habits.value))
   const todayKey = computed(() => getDateKey(new Date()))
-
-  // Текущий прогресс дня для хедера и напоминаний.
   const todayProgress = computed(() => {
     const todayPoint = stats.value.dailySeries[stats.value.dailySeries.length - 1]
-
     return {
       expected: todayPoint?.expected || 0,
       completed: todayPoint?.completed || 0,
@@ -64,11 +60,27 @@ export function useTracker() {
     }
   })
 
-  const useServerApi = computed(() => Boolean(config.public.useServerApi))
+  async function importLegacyData(): Promise<LegacyImportResponse | null> {
+    const legacyHabits = loadLegacyHabits()
+
+    if (legacyHabits.length === 0) {
+      return null
+    }
+
+    const result = await $fetch<LegacyImportResponse>('/api/legacy/import', {
+      method: 'POST',
+      body: { habits: legacyHabits }
+    })
+
+    // Удаляем старое состояние только после подтверждённой сервером транзакции.
+    window.localStorage.removeItem(LOCAL_STORAGE_KEY)
+    window.localStorage.setItem(MIGRATED_AT_KEY, new Date().toISOString())
+    return result
+  }
 
   async function pullFromServer() {
     const response = await $fetch<HabitsResponse>('/api/habits')
-    habits.value = normalizeState({ habits: response.habits, updatedAt: new Date().toISOString() }).habits
+    habits.value = response.habits.map(toViewHabit)
   }
 
   async function init() {
@@ -79,96 +91,69 @@ export function useTracker() {
     loading.value = true
     errorMessage.value = null
 
-    // Сначала пробуем серверный режим, затем мягко откатываемся в локальный режим.
-    if (useServerApi.value) {
-      try {
-        await pullFromServer()
-        source.value = 'server'
-        ready.value = true
-        loading.value = false
-        return
-      } catch {
-        source.value = 'local'
-      }
+    try {
+      await importLegacyData()
+      await pullFromServer()
+      ready.value = true
+    } catch {
+      errorMessage.value = 'Не удалось загрузить данные. Локальная копия не удалена.'
+    } finally {
+      loading.value = false
     }
-
-    habits.value = loadLocalHabits()
-    ready.value = true
-    loading.value = false
   }
 
   async function addHabit(input: HabitCreateInput) {
     errorMessage.value = null
 
-    if (source.value === 'server') {
-      try {
-        const response = await $fetch<HabitsResponse>('/api/habits', {
-          method: 'POST',
-          body: input
-        })
-
-        habits.value = response.habits
-        return
-      } catch {
-        errorMessage.value = 'Сервер недоступен. Сохраняю локально.'
-        source.value = 'local'
-      }
+    try {
+      const response = await $fetch<HabitResponse>('/api/habits', { method: 'POST', body: input })
+      habits.value = [toViewHabit(response.habit), ...habits.value]
+    } catch (error) {
+      errorMessage.value = 'Не удалось сохранить привычку.'
+      throw error
     }
-
-    habits.value = [createHabit(input), ...habits.value]
-    saveLocalHabits(habits.value)
   }
 
   async function deleteHabit(habitId: string) {
     errorMessage.value = null
 
-    if (source.value === 'server') {
-      try {
-        const response = await $fetch<HabitsResponse>(`/api/habits/${habitId}`, {
-          method: 'DELETE'
-        })
-
-        habits.value = response.habits
-        return
-      } catch {
-        errorMessage.value = 'Не удалось синхронизироваться с сервером. Удаляю локально.'
-        source.value = 'local'
-      }
+    try {
+      await $fetch(`/api/habits/${habitId}`, { method: 'DELETE' })
+      habits.value = habits.value.filter((habit) => habit.id !== habitId)
+    } catch (error) {
+      errorMessage.value = 'Не удалось удалить привычку.'
+      throw error
     }
-
-    habits.value = habits.value.filter((habit) => habit.id !== habitId)
-    saveLocalHabits(habits.value)
   }
 
   async function toggleHabit(habitId: string, dateKey = todayKey.value) {
     errorMessage.value = null
+    const habit = habits.value.find((candidate) => candidate.id === habitId)
 
-    if (source.value === 'server') {
-      try {
-        const response = await $fetch<HabitsResponse>(`/api/habits/${habitId}/toggle`, {
-          method: 'PATCH',
-          body: {
-            date: dateKey
-          }
-        })
-
-        habits.value = response.habits
-        return
-      } catch {
-        errorMessage.value = 'Не удалось синхронизироваться с сервером. Обновляю локально.'
-        source.value = 'local'
-      }
+    if (!habit) {
+      return
     }
 
-    habits.value = habits.value.map((habit) => {
-      if (habit.id !== habitId) {
-        return habit
+    const completed = habit.completions.includes(dateKey)
+
+    try {
+      const response = await $fetch<HabitEntryResponse>(`/api/habits/${habitId}/entries/${dateKey}`, {
+        method: 'PUT',
+        body: { status: completed ? 'PENDING' : 'COMPLETED' }
+      })
+      const nextCompletions = new Set(habit.completions)
+
+      if (response.entry.status === 'COMPLETED') {
+        nextCompletions.add(dateKey)
+      } else {
+        nextCompletions.delete(dateKey)
       }
 
-      return toggleCompletion(habit, dateKey)
-    })
-
-    saveLocalHabits(habits.value)
+      habit.completions = [...nextCompletions].sort()
+    } catch (error) {
+      errorMessage.value = 'Не удалось обновить выполнение.'
+      throw error
+    }
   }
 
   const dueTodayHabits = computed(() => habits.value.filter((habit) => isHabitDueOnDate(habit, todayKey.value)))
