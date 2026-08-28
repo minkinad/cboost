@@ -203,6 +203,22 @@ select:focus {
   gap: 0.65rem;
 }
 
+.weekday-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.habit-form .weekday-option {
+  display: flex;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
 .color-picker-row {
   display: flex;
   align-items: center;
@@ -311,6 +327,62 @@ select:focus {
   align-items: center;
 }
 
+.tracking-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.progress-value {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.step-btn {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 0.45rem 0.65rem;
+  background: #fff;
+  cursor: pointer;
+}
+
+.step-btn:disabled,
+.secondary-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.status-chip {
+  margin-left: auto;
+  padding: 0.28rem 0.52rem;
+  border-radius: 999px;
+  background: #eef3f7;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.status-chip.completed {
+  background: rgba(25, 135, 84, 0.15);
+  color: #13633e;
+}
+
+.status-chip.partial {
+  background: rgba(230, 126, 34, 0.14);
+  color: #9a4d0a;
+}
+
+.status-chip.skipped {
+  background: rgba(47, 111, 237, 0.12);
+  color: #234fa3;
+}
+
+.status-chip.missed {
+  background: rgba(179, 57, 81, 0.12);
+  color: #8f2138;
+}
+
 .toggle-btn {
   background: rgba(15, 113, 115, 0.12);
   color: #084f50;
@@ -359,6 +431,14 @@ select:focus {
 
 .mini-dot.done {
   background: var(--success);
+}
+
+.mini-dot.skipped {
+  background: #2f6fed;
+}
+
+.mini-dot.missed {
+  background: #b33951;
 }
 
 .empty-card {

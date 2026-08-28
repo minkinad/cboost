@@ -4,19 +4,28 @@ import type {
   HabitsResponse,
   LegacyImportResponse
 } from '~~/shared/contracts/habits'
+import {
+  adjustTrackingValue,
+  calculateBestHabitStreak,
+  calculateDailyCompletion,
+  calculateHabitStreak,
+  calculateTrackerStats,
+  canRecordEntryForDate,
+  getEntryStatusForDate,
+  isHabitScheduledForDate,
+  trackingStep
+} from '~~/shared/domain/habits'
 import type { HabitCreateInput } from '~~/shared/schemas/habits'
-import type { HabitDto } from '~~/shared/types/habits'
-import type { Habit } from '~~/shared/types/tracker'
-import { getDateKey } from '~~/shared/utils/dates'
-import { calculateStats, isHabitDueOnDate, normalizeState } from '~~/shared/utils/tracker'
+import type { HabitDto, HabitEntryDto, HabitScheduleType } from '~~/shared/types/habits'
+import type { Habit, HabitListItemView } from '~~/shared/types/tracker'
+import { getDateKeyInTimeZone, lastDateKeys } from '~~/shared/utils/dates'
+import { normalizeState } from '~~/shared/utils/tracker'
 
 const LOCAL_STORAGE_KEY = 'dailyboost.tracker.v1'
 const MIGRATED_AT_KEY = 'dailyboost.tracker.v1.migratedAt'
 
 function loadLegacyHabits(): Habit[] {
-  if (!import.meta.client) {
-    return []
-  }
+  if (!import.meta.client) return []
 
   try {
     const raw = window.localStorage.getItem(LOCAL_STORAGE_KEY)
@@ -26,53 +35,88 @@ function loadLegacyHabits(): Habit[] {
   }
 }
 
-function toViewHabit(habit: HabitDto): Habit {
-  return {
-    id: habit.id,
-    title: habit.title,
-    description: habit.description ?? '',
-    frequency: habit.schedule.type === 'DAILY' ? 'daily' : 'weekly',
-    target: habit.targetValue ?? 1,
-    unit: habit.unit ?? 'выполнение',
-    color: habit.color ?? '#ff5c3d',
-    createdAt: habit.createdAt,
-    completions: (habit.entries ?? [])
-      .filter((entry) => entry.status === 'COMPLETED')
-      .map((entry) => entry.date)
-  }
+function scheduleLabel(type: HabitScheduleType, habit: HabitDto): string {
+  if (type === 'EVERY_DAY') return 'Каждый день'
+  if (type === 'WEEKDAYS') return `Дни недели: ${habit.schedule.weekdays.join(', ')}`
+  if (type === 'TIMES_PER_WEEK') return `${habit.schedule.timesPerWeek} раз в неделю`
+  return `Каждые ${habit.schedule.intervalDays} дн.`
+}
+
+function createdLabel(value: string, timezone: string): string {
+  return new Intl.DateTimeFormat('ru-RU', {
+    timeZone: timezone,
+    month: 'short',
+    day: 'numeric'
+  }).format(new Date(value))
+}
+
+function replaceEntry(habit: HabitDto, entry: HabitEntryDto): void {
+  const entries = habit.entries ?? []
+  const index = entries.findIndex((candidate) => candidate.date === entry.date)
+  habit.entries = index < 0
+    ? [...entries, entry].sort((left, right) => left.date.localeCompare(right.date))
+    : entries.map((candidate, candidateIndex) => candidateIndex === index ? entry : candidate)
 }
 
 export function useTracker() {
-  const habits = useState<Habit[]>('tracker-habits', () => [])
+  const { user } = useUserSession()
+  const habits = useState<HabitDto[]>('tracker-habits', () => [])
   const source = useState<'server'>('tracker-source', () => 'server')
   const loading = useState<boolean>('tracker-loading', () => false)
   const ready = useState<boolean>('tracker-ready', () => false)
   const errorMessage = useState<string | null>('tracker-error-message', () => null)
-
-  const stats = computed(() => calculateStats(habits.value))
-  const todayKey = computed(() => getDateKey(new Date()))
+  const timezone = computed(() => user.value?.timezone || 'UTC')
+  const todayKey = computed(() => getDateKeyInTimeZone(new Date(), timezone.value))
+  const stats = computed(() => calculateTrackerStats(habits.value, todayKey.value))
   const todayProgress = computed(() => {
-    const todayPoint = stats.value.dailySeries[stats.value.dailySeries.length - 1]
+    const day = calculateDailyCompletion(habits.value, todayKey.value, todayKey.value)
     return {
-      expected: todayPoint?.expected || 0,
-      completed: todayPoint?.completed || 0,
-      pending: Math.max(0, (todayPoint?.expected || 0) - (todayPoint?.completed || 0))
+      expected: day.expected,
+      completed: day.completed,
+      pending: Math.max(0, day.expected - day.completed)
     }
+  })
+
+  const habitItems = computed<HabitListItemView[]>(() => {
+    const recentDates = lastDateKeys(7, todayKey.value)
+
+    return habits.value.map((habit) => {
+      const todayEntry = (habit.entries ?? []).find((entry) => entry.date === todayKey.value)
+      return {
+        id: habit.id,
+        title: habit.title,
+        description: habit.description ?? '',
+        color: habit.color ?? '#ff5c3d',
+        trackingType: habit.trackingType,
+        targetValue: habit.targetValue,
+        unit: habit.unit ?? 'выполнение',
+        currentValue: todayEntry?.value ?? null,
+        step: trackingStep(habit.trackingType),
+        status: getEntryStatusForDate(habit, todayKey.value, todayKey.value),
+        scheduledToday: canRecordEntryForDate(habit, todayKey.value),
+        scheduleLabel: scheduleLabel(habit.schedule.type, habit),
+        createdLabel: createdLabel(habit.createdAt, timezone.value),
+        currentStreak: calculateHabitStreak(habit, todayKey.value),
+        bestStreak: calculateBestHabitStreak(habit, todayKey.value),
+        recentDays: recentDates.map((date) => ({
+          date,
+          scheduled: date === todayKey.value
+            ? canRecordEntryForDate(habit, date)
+            : isHabitScheduledForDate(habit, habit.schedule, date),
+          status: getEntryStatusForDate(habit, date, todayKey.value)
+        }))
+      }
+    })
   })
 
   async function importLegacyData(): Promise<LegacyImportResponse | null> {
     const legacyHabits = loadLegacyHabits()
-
-    if (legacyHabits.length === 0) {
-      return null
-    }
+    if (legacyHabits.length === 0) return null
 
     const result = await $fetch<LegacyImportResponse>('/api/legacy/import', {
       method: 'POST',
       body: { habits: legacyHabits }
     })
-
-    // Удаляем старое состояние только после подтверждённой сервером транзакции.
     window.localStorage.removeItem(LOCAL_STORAGE_KEY)
     window.localStorage.setItem(MIGRATED_AT_KEY, new Date().toISOString())
     return result
@@ -80,14 +124,11 @@ export function useTracker() {
 
   async function pullFromServer() {
     const response = await $fetch<HabitsResponse>('/api/habits')
-    habits.value = response.habits.map(toViewHabit)
+    habits.value = response.habits
   }
 
   async function init() {
-    if (!import.meta.client || ready.value || loading.value) {
-      return
-    }
-
+    if (!import.meta.client || ready.value || loading.value) return
     loading.value = true
     errorMessage.value = null
 
@@ -103,74 +144,66 @@ export function useTracker() {
   }
 
   async function addHabit(input: HabitCreateInput) {
-    errorMessage.value = null
-
-    try {
-      const response = await $fetch<HabitResponse>('/api/habits', { method: 'POST', body: input })
-      habits.value = [toViewHabit(response.habit), ...habits.value]
-    } catch (error) {
-      errorMessage.value = 'Не удалось сохранить привычку.'
-      throw error
-    }
+    const response = await $fetch<HabitResponse>('/api/habits', { method: 'POST', body: input })
+    habits.value = [response.habit, ...habits.value]
   }
 
   async function deleteHabit(habitId: string) {
-    errorMessage.value = null
-
-    try {
-      await $fetch(`/api/habits/${habitId}`, { method: 'DELETE' })
-      habits.value = habits.value.filter((habit) => habit.id !== habitId)
-    } catch (error) {
-      errorMessage.value = 'Не удалось удалить привычку.'
-      throw error
-    }
+    await $fetch(`/api/habits/${habitId}`, { method: 'DELETE' })
+    habits.value = habits.value.filter((habit) => habit.id !== habitId)
   }
 
-  async function toggleHabit(habitId: string, dateKey = todayKey.value) {
+  async function putEntry(habit: HabitDto, body: Record<string, unknown>) {
     errorMessage.value = null
-    const habit = habits.value.find((candidate) => candidate.id === habitId)
-
-    if (!habit) {
-      return
-    }
-
-    const completed = habit.completions.includes(dateKey)
 
     try {
-      const response = await $fetch<HabitEntryResponse>(`/api/habits/${habitId}/entries/${dateKey}`, {
+      const response = await $fetch<HabitEntryResponse>(`/api/habits/${habit.id}/entries/${todayKey.value}`, {
         method: 'PUT',
-        body: { status: completed ? 'PENDING' : 'COMPLETED' }
+        body
       })
-      const nextCompletions = new Set(habit.completions)
-
-      if (response.entry.status === 'COMPLETED') {
-        nextCompletions.add(dateKey)
-      } else {
-        nextCompletions.delete(dateKey)
-      }
-
-      habit.completions = [...nextCompletions].sort()
+      replaceEntry(habit, response.entry)
     } catch (error) {
-      errorMessage.value = 'Не удалось обновить выполнение.'
+      errorMessage.value = 'Не удалось обновить прогресс.'
       throw error
     }
   }
 
-  const dueTodayHabits = computed(() => habits.value.filter((habit) => isHabitDueOnDate(habit, todayKey.value)))
+  async function toggleHabit(habitId: string) {
+    const habit = habits.value.find((candidate) => candidate.id === habitId)
+    if (!habit || habit.trackingType !== 'BOOLEAN') return
+    const status = getEntryStatusForDate(habit, todayKey.value, todayKey.value)
+    await putEntry(habit, { completed: status !== 'COMPLETED' })
+  }
+
+  async function adjustHabit(habitId: string, direction: -1 | 1) {
+    const habit = habits.value.find((candidate) => candidate.id === habitId)
+    if (!habit || habit.trackingType === 'BOOLEAN') return
+    const entry = (habit.entries ?? []).find((candidate) => candidate.date === todayKey.value)
+    await putEntry(habit, { value: adjustTrackingValue(habit.trackingType, entry?.value ?? null, direction) })
+  }
+
+  async function skipHabit(habitId: string, note?: string) {
+    const habit = habits.value.find((candidate) => candidate.id === habitId)
+    if (!habit) return
+    await putEntry(habit, { status: 'SKIPPED', note: note || null })
+  }
 
   return {
     habits,
+    habitItems,
     stats,
     source,
     loading,
     ready,
     errorMessage,
+    timezone,
     todayKey,
     todayProgress,
-    dueTodayHabits,
     init,
     addHabit,
     deleteHabit,
-    toggleHabit
+    toggleHabit,
+    adjustHabit,
+    skipHabit
   }
 }

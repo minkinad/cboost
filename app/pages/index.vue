@@ -4,7 +4,7 @@ import type { HabitCreateInput } from '~~/shared/schemas/habits'
 const { user, fetch: refreshSession } = useUserSession()
 
 const {
-  habits,
+  habitItems,
   stats,
   source,
   errorMessage,
@@ -13,7 +13,9 @@ const {
   init,
   addHabit,
   deleteHabit,
-  toggleHabit
+  toggleHabit,
+  adjustHabit,
+  skipHabit
 } = useTracker()
 
 const {
@@ -40,8 +42,8 @@ async function handleCreate(payload: HabitCreateInput) {
   maybeSendReminder(todayProgress.value.pending)
 }
 
-async function handleToggle(habitId: string, dateKey: string) {
-  await toggleHabit(habitId, dateKey)
+async function handleToggle(habitId: string) {
+  await toggleHabit(habitId)
 }
 
 async function handleRemove(habitId: string) {
@@ -78,12 +80,13 @@ onBeforeUnmount(() => {
       :expected="todayProgress.expected"
       :pending="todayProgress.pending"
       :data-source="source"
+      :today-key="todayKey"
     />
 
     <p v-if="errorMessage" class="error-banner">{{ errorMessage }}</p>
 
     <div class="top-grid">
-      <HabitForm @create="handleCreate" />
+      <HabitForm :today-key="todayKey" @create="handleCreate" />
       <MotivationCard
         :message="motivationalText"
         :pending="todayProgress.pending"
@@ -95,9 +98,11 @@ onBeforeUnmount(() => {
 
     <div class="main-grid">
       <HabitList
-        :habits="habits"
-        :today-key="todayKey"
+        :habits="habitItems"
         @toggle="handleToggle"
+        @increment="adjustHabit($event, 1)"
+        @decrement="adjustHabit($event, -1)"
+        @skip="skipHabit"
         @remove="handleRemove"
       />
 

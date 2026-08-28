@@ -33,15 +33,15 @@ defineProps<{
       </article>
 
       <article class="stat-box compact">
-        <p class="stat-label">Текущая серия</p>
-        <p class="stat-value">{{ stats.activeStreak }}</p>
-        <p class="stat-note">дней подряд с хотя бы одним выполнением</p>
+        <p class="stat-label">Серия идеальных дней</p>
+        <p class="stat-value">{{ stats.perfectDayStreak }}</p>
+        <p class="stat-note">все обязательные привычки выполнены</p>
       </article>
 
       <article class="stat-box compact">
         <p class="stat-label">Лучшая привычка</p>
-        <p class="stat-value small">{{ stats.topHabit?.title || 'Пока мало данных' }}</p>
-        <p class="stat-note">за последние 30 дней</p>
+        <p class="stat-value small">{{ stats.bestHabit?.title || 'Пока мало данных' }}</p>
+        <p class="stat-note">текущая {{ stats.bestHabit?.currentStreak || 0 }} · рекорд {{ stats.bestHabit?.bestStreak || 0 }}</p>
       </article>
     </div>
   </section>

@@ -39,7 +39,37 @@ export interface TrackerStats {
   weekExpected: number
   monthCompleted: number
   monthExpected: number
-  activeStreak: number
-  topHabit: Habit | null
+  perfectDayStreak: number
+  bestHabit: {
+    id: string
+    title: string
+    currentStreak: number
+    bestStreak: number
+  } | null
   dailySeries: DailySeriesPoint[]
+}
+
+export interface HabitDayView {
+  date: string
+  scheduled: boolean
+  status: import('./habits').HabitEntryStatus | null
+}
+
+export interface HabitListItemView {
+  id: string
+  title: string
+  description: string
+  color: string
+  trackingType: import('./habits').TrackingType
+  targetValue: number | null
+  unit: string
+  currentValue: number | null
+  step: number
+  status: import('./habits').HabitEntryStatus | null
+  scheduledToday: boolean
+  scheduleLabel: string
+  createdLabel: string
+  currentStreak: number
+  bestStreak: number
+  recentDays: HabitDayView[]
 }

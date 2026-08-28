@@ -1,59 +1,27 @@
 <script setup lang="ts">
-import type { Habit } from '~~/shared/types/tracker'
-import { lastNDays } from '~~/shared/utils/dates'
-import { isHabitDueOnDate } from '~~/shared/utils/tracker'
+import type { HabitListItemView } from '~~/shared/types/tracker'
 
-const props = defineProps<{
-  habits: Habit[]
-  todayKey: string
+defineProps<{
+  habits: HabitListItemView[]
 }>()
 
 const emit = defineEmits<{
-  toggle: [habitId: string, dateKey: string]
+  toggle: [habitId: string]
+  increment: [habitId: string]
+  decrement: [habitId: string]
+  skip: [habitId: string]
   remove: [habitId: string]
 }>()
-
-const recentKeys = computed(() => lastNDays(7, new Date()))
-
-function isDone(habit: Habit, dateKey: string) {
-  return habit.completions.includes(dateKey)
-}
-
-function completionRatio(habit: Habit) {
-  const due = recentKeys.value.filter((dateKey) => isHabitDueOnDate(habit, dateKey)).length
-
-  if (due === 0) {
-    return 0
-  }
-
-  const done = recentKeys.value.filter((dateKey) => habit.completions.includes(dateKey)).length
-  return Math.round((done / due) * 100)
-}
-
-function createdLabel(value: string) {
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return 'дата неизвестна'
-  }
-
-  return new Intl.DateTimeFormat('ru-RU', {
-    month: 'short',
-    day: 'numeric'
-  }).format(date)
-}
-
-const emptyState = computed(() => props.habits.length === 0)
 </script>
 
 <template>
   <section class="panel-card">
     <div class="section-head">
       <h2>Список привычек</h2>
-      <p>Отмечай прогресс за сегодня и смотри стабильность за 7 дней.</p>
+      <p>Прогресс и серии рассчитываются по календарю пользователя.</p>
     </div>
 
-    <div v-if="emptyState" class="empty-card">
+    <div v-if="habits.length === 0" class="empty-card">
       <p>Пока нет привычек. Добавь первую, чтобы запустить прогресс.</p>
     </div>
 
@@ -63,41 +31,50 @@ const emptyState = computed(() => props.habits.length === 0)
           <span class="habit-color" :style="{ backgroundColor: habit.color }" />
           <div>
             <h3>{{ habit.title }}</h3>
-            <p>
-              {{ habit.frequency === 'daily' ? 'Ежедневно' : 'Еженедельно' }}
-              · цель {{ habit.target }} {{ habit.unit }}
-              · создано {{ createdLabel(habit.createdAt) }}
-            </p>
+            <p>{{ habit.scheduleLabel }} · создано {{ habit.createdLabel }}</p>
           </div>
         </div>
 
         <p v-if="habit.description" class="habit-description">{{ habit.description }}</p>
 
-        <div class="habit-actions">
+        <div class="tracking-row">
           <button
+            v-if="habit.trackingType === 'BOOLEAN'"
             class="toggle-btn"
-            :class="{ done: isDone(habit, todayKey) }"
-            :disabled="!isHabitDueOnDate(habit, todayKey)"
-            @click="emit('toggle', habit.id, todayKey)"
+            :class="{ done: habit.status === 'COMPLETED' }"
+            :disabled="!habit.scheduledToday || habit.status === 'SKIPPED'"
+            @click="emit('toggle', habit.id)"
           >
-            {{ isDone(habit, todayKey) ? 'Выполнено сегодня' : 'Отметить выполненным' }}
+            {{ habit.status === 'COMPLETED' ? '✓ Выполнено' : '○ Отметить' }}
           </button>
 
-          <button class="text-btn" @click="emit('remove', habit.id)">Удалить</button>
+          <template v-else>
+            <span class="progress-value">{{ habit.currentValue || 0 }} / {{ habit.targetValue }} {{ habit.unit }}</span>
+            <button class="step-btn" :disabled="!habit.scheduledToday || habit.status === 'SKIPPED'" @click="emit('decrement', habit.id)">−{{ habit.step }}</button>
+            <button class="step-btn" :disabled="!habit.scheduledToday || habit.status === 'SKIPPED'" @click="emit('increment', habit.id)">+{{ habit.step }}</button>
+          </template>
 
-          <span class="ratio-chip">7д {{ completionRatio(habit) }}%</span>
+          <span class="status-chip" :class="habit.status?.toLowerCase()">{{ habit.status || 'NOT SCHEDULED' }}</span>
+        </div>
+
+        <div class="habit-actions">
+          <button class="secondary-btn" :disabled="!habit.scheduledToday || habit.status === 'SKIPPED'" @click="emit('skip', habit.id)">Пропустить сегодня</button>
+          <button class="text-btn" @click="emit('remove', habit.id)">Удалить</button>
+          <span class="ratio-chip">🔥 {{ habit.currentStreak }} · рекорд {{ habit.bestStreak }}</span>
         </div>
 
         <div class="mini-track">
           <span
-            v-for="dateKey in recentKeys"
-            :key="`${habit.id}-${dateKey}`"
+            v-for="day in habit.recentDays"
+            :key="`${habit.id}-${day.date}`"
             class="mini-dot"
             :class="{
-              due: isHabitDueOnDate(habit, dateKey),
-              done: habit.completions.includes(dateKey)
+              due: day.scheduled,
+              done: day.status === 'COMPLETED',
+              skipped: day.status === 'SKIPPED',
+              missed: day.status === 'MISSED'
             }"
-            :title="`${dateKey}: ${habit.completions.includes(dateKey) ? 'Сделано' : 'Открыто'}`"
+            :title="`${day.date}: ${day.status || 'не запланировано'}`"
           />
         </div>
       </li>
