@@ -1,63 +1,40 @@
-[![Deploy to GitHub Pages](https://github.com/MinAleDm/DailyBoost/actions/workflows/pages.yml/badge.svg)](https://github.com/MinAleDm/DailyBoost/actions/workflows/pages.yml)
+[![DailyBoost CI](https://github.com/minkinad/cboost/actions/workflows/pages.yml/badge.svg)](https://github.com/minkinad/cboost/actions/workflows/pages.yml)
 [![Nuxt 4](https://img.shields.io/badge/Nuxt-4-00DC82?logo=nuxt&logoColor=white)](https://nuxt.com/)
-[![License: MIT](https://img.shields.io/github/license/MinAleDm/DailyBoost)](https://github.com/MinAleDm/DailyBoost/blob/master/LICENSE)
 
-# DailyBoost
+# DailyBoost 2.0
 
-DailyBoost — современный трекер задач и привычек на Nuxt 4.
+Full-stack habit tracker on Nuxt 4, PostgreSQL and Prisma, with HttpOnly cookie authentication and owner-scoped Nitro API.
 
-## Возможности
-- Ежедневные и еженедельные привычки/задачи
-- Отметка выполнения в один клик
-- Статистика выполнения за неделю и месяц
-- Тепловая карта активности за 4 недели
-- Мотивационные уведомления в браузере
-- Два режима данных:
-  - `local` (по умолчанию): `localStorage`, работает на GitHub Pages
-  - `server`: серверные API-эндпоинты Nuxt в `/api/habits`
+## Local setup
 
-## Стек
-- Nuxt 4
-- Vue 3 + Composition API
-- Nitro API routes для серверного режима
-- Чистый CSS (адаптив для desktop/mobile)
+Requires Node.js 24.15+ and Docker.
 
-## Локальный запуск
 ```bash
+cp .env.example .env
+docker compose up -d postgres
 npm install
+npm run db:migrate
 npm run dev
 ```
 
-## Сборка
+Set `NUXT_SESSION_PASSWORD` in `.env` to a random string of at least 32 characters.
+
+## Quality gates
+
 ```bash
+npm run lint
+npm run typecheck
+npm test
 npm run build
 ```
 
-## Статическая генерация (GitHub Pages)
-```bash
-npm run generate
-```
+Integration tests use the PostgreSQL instance from `compose.yaml`; run `npm run db:migrate:deploy` first on a fresh test database.
 
-Для GitHub Pages держи `NUXT_PUBLIC_USE_SERVER_API=false`.
+## Documentation
 
-## Серверный API-режим
-Чтобы принудительно включить серверный режим локально:
+- [Architecture](docs/ARCHITECTURE.md)
+- [Data model](docs/DATA_MODEL.md)
+- [Authentication](docs/AUTH.md)
+- [Database and legacy migration](docs/MIGRATION.md)
 
-```bash
-NUXT_PUBLIC_USE_SERVER_API=true npm run dev
-```
-
-Доступные эндпоинты:
-- `GET /api/habits`
-- `POST /api/habits`
-- `PATCH /api/habits/:id/toggle`
-- `DELETE /api/habits/:id`
-
-## Деплой на GitHub Pages
-Workflow уже настроен: `.github/workflows/pages.yml`.
-
-Он автоматически определяет правильный `baseURL`:
-- `/` для `<user>.github.io`
-- `/<repo>/` для project pages
-
-После этого выполняется статическая генерация и публикация `.output/public`.
+Goals, Analytics 2.0, PWA and AI are intentionally deferred.
