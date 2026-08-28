@@ -368,6 +368,35 @@ select:focus {
   color: var(--muted);
 }
 
+.account-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.8rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.auth-card {
+  width: min(100%, 460px);
+}
+
+.auth-card h1 {
+  margin: 0.25rem 0 1.25rem;
+}
+
+.auth-switch {
+  margin-top: 1rem;
+  color: var(--muted);
+}
+
 .motivation-card {
   display: grid;
   gap: 0.72rem;
