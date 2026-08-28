@@ -5,28 +5,34 @@ import type {
   TrackerState,
   TrackerStats
 } from '../types/tracker'
+import { isValid } from 'date-fns'
+import { getDateKey, isDateKey, lastNDays, parseDateKey } from './dates'
 
-export const HABIT_COLORS = ['#ff5c3d', '#0f7173', '#2f6fed', '#e67e22', '#198754', '#b33951']
-
-const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/
-
-export function getDateKey(date: Date): string {
-  const year = date.getFullYear()
-  const month = `${date.getMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getDate()}`.padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function parseDateKey(dateKey: string): Date {
-  const [year, month, day] = dateKey.split('-').map(Number)
-  return new Date(year, month - 1, day, 12, 0, 0, 0)
-}
+export const DEFAULT_HABIT_COLOR = '#ff5c3d'
+export const HABIT_COLORS: readonly string[] = [
+  DEFAULT_HABIT_COLOR,
+  '#0f7173',
+  '#2f6fed',
+  '#e67e22',
+  '#198754',
+  '#b33951'
+]
 
 function getDueWeekday(habit: Habit): number {
   return new Date(habit.createdAt).getDay()
 }
 
 export function isHabitDueOnDate(habit: Habit, dateKey: string): boolean {
+  if (!isDateKey(dateKey)) {
+    return false
+  }
+
+  const createdAt = new Date(habit.createdAt)
+
+  if (!isValid(createdAt) || dateKey < getDateKey(createdAt)) {
+    return false
+  }
+
   if (habit.frequency === 'daily') {
     return true
   }
@@ -43,7 +49,7 @@ export function createHabit(input: HabitCreateInput, now = new Date()): Habit {
   }
 
   const unit = input.unit.trim() || 'раз'
-  const color = HABIT_COLORS.includes(input.color) ? input.color : HABIT_COLORS[0]
+  const color = HABIT_COLORS.includes(input.color) ? input.color : DEFAULT_HABIT_COLOR
 
   return {
     id: crypto.randomUUID(),
@@ -68,21 +74,26 @@ export function normalizeState(state: TrackerState | null | undefined): TrackerS
 
   // Нормализуем данные из localStorage/API, чтобы избежать падений UI.
   return {
-    habits: state.habits.map((habit) => ({
-      ...habit,
-      title: `${habit.title || ''}`.trim(),
-      description: `${habit.description || ''}`.trim(),
-      unit: `${habit.unit || 'раз'}`.trim() || 'раз',
-      target: Math.max(1, Math.round(habit.target || 1)),
-      color: HABIT_COLORS.includes(habit.color) ? habit.color : HABIT_COLORS[0],
-      completions: Array.from(new Set((habit.completions || []).filter((entry) => DATE_KEY_RE.test(entry)))).sort()
-    })),
+    habits: state.habits.map((habit) => {
+      const createdAt = new Date(habit.createdAt)
+
+      return {
+        ...habit,
+        title: `${habit.title || ''}`.trim(),
+        description: `${habit.description || ''}`.trim(),
+        unit: `${habit.unit || 'раз'}`.trim() || 'раз',
+        target: Math.max(1, Math.round(habit.target || 1)),
+        color: HABIT_COLORS.includes(habit.color) ? habit.color : DEFAULT_HABIT_COLOR,
+        createdAt: isValid(createdAt) ? createdAt.toISOString() : new Date().toISOString(),
+        completions: Array.from(new Set((habit.completions || []).filter(isDateKey))).sort()
+      }
+    }),
     updatedAt: state.updatedAt || new Date().toISOString()
   }
 }
 
 export function toggleCompletion(habit: Habit, dateKey: string): Habit {
-  if (!DATE_KEY_RE.test(dateKey)) {
+  if (!isDateKey(dateKey)) {
     throw new Error('Неверный формат даты')
   }
 
@@ -98,20 +109,6 @@ export function toggleCompletion(habit: Habit, dateKey: string): Habit {
     ...habit,
     completions: Array.from(completions).sort()
   }
-}
-
-export function lastNDays(length: number, endDate = new Date()): string[] {
-  const keys: string[] = []
-  const cursor = new Date(endDate)
-  cursor.setHours(12, 0, 0, 0)
-
-  for (let offset = length - 1; offset >= 0; offset -= 1) {
-    const date = new Date(cursor)
-    date.setDate(cursor.getDate() - offset)
-    keys.push(getDateKey(date))
-  }
-
-  return keys
 }
 
 function summarizeRange(habits: Habit[], dateKeys: string[]): { expected: number; completed: number } {
@@ -139,8 +136,7 @@ function getActiveStreak(habits: Habit[], now = new Date()): number {
   const horizon = lastNDays(365, now)
   let streak = 0
 
-  for (let index = horizon.length - 1; index >= 0; index -= 1) {
-    const dateKey = horizon[index]
+  for (const dateKey of [...horizon].reverse()) {
     const hasAnyCompletion = habits.some((habit) => habit.completions.includes(dateKey))
 
     if (!hasAnyCompletion) {
@@ -161,7 +157,9 @@ function getTopHabit(habits: Habit[], monthKeys: string[]): Habit | null {
   const scored = habits
     .map((habit) => {
       const dueCount = monthKeys.filter((dateKey) => isHabitDueOnDate(habit, dateKey)).length
-      const completedCount = monthKeys.filter((dateKey) => habit.completions.includes(dateKey)).length
+      const completedCount = monthKeys.filter(
+        (dateKey) => isHabitDueOnDate(habit, dateKey) && habit.completions.includes(dateKey)
+      ).length
       const ratio = dueCount === 0 ? 0 : completedCount / dueCount
 
       return {

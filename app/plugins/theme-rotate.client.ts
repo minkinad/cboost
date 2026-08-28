@@ -2,7 +2,7 @@ interface ThemePalette {
   vars: Record<string, string>
 }
 
-const PALETTES: ThemePalette[] = [
+const PALETTES: [ThemePalette, ...ThemePalette[]] = [
   {
     vars: {
       '--accent': '#0f7173',
@@ -88,7 +88,7 @@ function pickPaletteIndex(): number {
 export default defineNuxtPlugin(() => {
   const root = document.documentElement
   const index = pickPaletteIndex()
-  const palette = PALETTES[index]
+  const palette = PALETTES[index] ?? PALETTES[0]
 
   for (const [key, value] of Object.entries(palette.vars)) {
     root.style.setProperty(key, value)

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Habit } from '~~/shared/types/tracker'
-import { isHabitDueOnDate, lastNDays } from '~~/shared/utils/tracker'
+import { lastNDays } from '~~/shared/utils/dates'
+import { isHabitDueOnDate } from '~~/shared/utils/tracker'
 
 const props = defineProps<{
   habits: Habit[]

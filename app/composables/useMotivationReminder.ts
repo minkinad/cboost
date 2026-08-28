@@ -35,7 +35,8 @@ export function useMotivationReminder() {
   }
 
   function pickMessage(seed: number): string {
-    return POSITIVE_MESSAGES[seed % POSITIVE_MESSAGES.length]
+    const index = Math.abs(seed) % POSITIVE_MESSAGES.length
+    return POSITIVE_MESSAGES[index] ?? POSITIVE_MESSAGES[0] ?? ''
   }
 
   function maybeSendReminder(pendingCount: number) {
