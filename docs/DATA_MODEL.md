@@ -15,7 +15,7 @@ The application lists active habits by default. `archivedAt` preserves history; 
 
 ## HabitSchedule
 
-Schedule types are `DAILY`, `WEEKLY`, and `INTERVAL`. Weekdays use `0..6` (Sunday through Saturday). A weekly schedule is either fixed weekdays or a flexible `timesPerWeek`, never both. Interval schedules require `intervalDays`.
+Schedule types are `EVERY_DAY`, `WEEKDAYS`, `TIMES_PER_WEEK`, and `INTERVAL`. Weekdays use `0..6` (Sunday through Saturday). Flexible weekly schedules use `timesPerWeek`; interval schedules require `intervalDays`.
 
 `startDate`/`endDate` are PostgreSQL `DATE`. Database checks enforce date order and schedule shape; Zod additionally rejects duplicate weekdays.
 

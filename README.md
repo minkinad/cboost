@@ -34,6 +34,7 @@ Integration tests use the PostgreSQL instance from `compose.yaml`; run `npm run 
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Data model](docs/DATA_MODEL.md)
+- [Habit domain rules](docs/HABIT_DOMAIN.md)
 - [Authentication](docs/AUTH.md)
 - [Database and legacy migration](docs/MIGRATION.md)
 
