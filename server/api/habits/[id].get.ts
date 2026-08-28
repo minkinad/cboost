@@ -1,3 +1,4 @@
+import type { HabitResponse } from '~~/shared/contracts/habits'
 import { habitIdParamsSchema } from '~~/shared/schemas/habits'
 import { habitService } from '../../services/habits/habit.service'
 import { requireSessionUser } from '../../utils/session'
@@ -8,8 +9,7 @@ export default defineEventHandler(async (event) => {
   const { id } = await getValidatedRouterParams(event, habitIdParamsSchema.parse)
 
   try {
-    await habitService.deleteHabit(user.id, id)
-    setResponseStatus(event, 204)
+    return { habit: await habitService.getHabit(user.id, id) } satisfies HabitResponse
   } catch (error) {
     throw toHttpError(error)
   }
