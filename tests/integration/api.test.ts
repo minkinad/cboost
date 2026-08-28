@@ -88,7 +88,7 @@ describe('authenticated habits API', () => {
         title: 'Некорректная цель',
         trackingType: 'COUNT',
         unit: 'раз',
-        schedule: { type: 'DAILY', weekdays: [], startDate: '2026-08-01' }
+        schedule: { type: 'EVERY_DAY', weekdays: [], startDate: '2026-08-01' }
       }
     })
     expect(invalidTarget.status).toBe(400)
@@ -102,7 +102,7 @@ describe('authenticated habits API', () => {
         targetValue: 10,
         unit: 'раз',
         color: '#ff5c3d',
-        schedule: { type: 'DAILY', weekdays: [], startDate: '2026-08-01' }
+        schedule: { type: 'EVERY_DAY', weekdays: [], startDate: '2026-08-01' }
       }
     })
     expect(created.status).toBe(201)
@@ -157,6 +157,25 @@ describe('authenticated habits API', () => {
     const entriesBody = await entries.json()
     expect(entriesBody.entries).toHaveLength(1)
     expect(entriesBody.entries[0].id).toBe(updatedEntry.id)
+
+    const skippedEntry = await request(`/api/habits/${habit.id}/entries/2026-08-28`, {
+      method: 'PUT',
+      cookie: ownerCookie,
+      body: { status: 'SKIPPED', note: 'Recovery day' }
+    })
+    expect(skippedEntry.status).toBe(200)
+    expect(((await skippedEntry.json()) as HabitEntryResponse).entry).toMatchObject({
+      id: updatedEntry.id,
+      status: 'SKIPPED',
+      note: 'Recovery day'
+    })
+
+    const explicitMissed = await request(`/api/habits/${habit.id}/entries/2026-08-28`, {
+      method: 'PUT',
+      cookie: ownerCookie,
+      body: { status: 'MISSED' }
+    })
+    expect(explicitMissed.status).toBe(400)
 
     const legacyBody = {
       habits: [{

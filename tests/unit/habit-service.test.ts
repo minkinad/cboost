@@ -62,7 +62,7 @@ function makeHabit(userId = 'user-1', title = 'Чтение'): HabitDto & { user
     archivedAt: null,
     schedule: {
       id: 'schedule-1',
-      type: 'DAILY',
+      type: 'EVERY_DAY',
       weekdays: [],
       timesPerWeek: null,
       intervalDays: null,
