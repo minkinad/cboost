@@ -2,7 +2,17 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
+  modules: ['@nuxt/eslint', 'nuxt-auth-utils'],
   css: ['~/assets/styles/main.css'],
+  typescript: {
+    typeCheck: true,
+    tsConfig: {
+      compilerOptions: {
+        strict: true,
+        noUncheckedIndexedAccess: true
+      }
+    }
+  },
   app: {
     baseURL: process.env.NUXT_APP_BASE_URL || '/',
     head: {
@@ -25,8 +35,14 @@ export default defineNuxtConfig({
     }
   },
   runtimeConfig: {
-    public: {
-      useServerApi: process.env.NUXT_PUBLIC_USE_SERVER_API === 'true'
+    session: {
+      password: process.env.NUXT_SESSION_PASSWORD || '',
+      maxAge: 60 * 60 * 24 * 30,
+      cookie: {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production'
+      }
     }
   },
   nitro: {

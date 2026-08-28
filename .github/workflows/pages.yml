@@ -1,4 +1,4 @@
-name: Деплой DailyBoost на GitHub Pages
+name: DailyBoost CI
 
 on:
   push:
@@ -7,16 +7,28 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: true
+env:
+  DATABASE_URL: postgresql://dailyboost:dailyboost@localhost:5432/dailyboost?schema=public
+  NUXT_SESSION_PASSWORD: ci-session-password-at-least-thirty-two-characters-long
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: dailyboost
+          POSTGRES_PASSWORD: dailyboost
+          POSTGRES_USER: dailyboost
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dailyboost -d dailyboost"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,49 +36,23 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
-      - name: Detect base URL
-        run: |
-          REPO_NAME="${GITHUB_REPOSITORY#*/}"
-          OWNER_NAME="${GITHUB_REPOSITORY%/*}"
-
-          if [ "$REPO_NAME" = "${OWNER_NAME}.github.io" ]; then
-            BASE_URL="/"
-          else
-            BASE_URL="/$REPO_NAME/"
-          fi
-
-          echo "NUXT_APP_BASE_URL=$BASE_URL" >> "$GITHUB_ENV"
-          echo "Using NUXT_APP_BASE_URL=$BASE_URL"
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate static build
-        env:
-          NUXT_PUBLIC_USE_SERVER_API: 'false'
-          NITRO_PRESET: github_pages
-        run: npm run generate
+      - name: Apply database migrations
+        run: npm run db:migrate:deploy
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./.output/public
+      - name: Lint
+        run: npm run lint
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build

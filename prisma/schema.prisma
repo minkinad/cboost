@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../server/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TrackingType {
+  BOOLEAN
+  COUNT
+  DURATION
+  QUANTITY
+}
+
+enum HabitScheduleType {
+  DAILY
+  WEEKLY
+  INTERVAL
+}
+
+enum HabitEntryStatus {
+  PENDING
+  PARTIAL
+  COMPLETED
+  SKIPPED
+  MISSED
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique @db.VarChar(320)
+  passwordHash String   @db.VarChar(255)
+  displayName  String?  @db.VarChar(80)
+  timezone     String   @default("UTC") @db.VarChar(100)
+  habits       Habit[]
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+}
+
+model Habit {
+  id           String         @id @default(uuid()) @db.Uuid
+  userId       String         @db.Uuid
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title        String         @db.VarChar(80)
+  description  String?        @db.Text
+  trackingType TrackingType   @default(BOOLEAN)
+  targetValue  Decimal?       @db.Decimal(12, 3)
+  unit         String?        @db.VarChar(20)
+  color        String?        @db.VarChar(7)
+  icon         String?        @db.VarChar(80)
+  legacySourceId String?      @db.VarChar(128)
+  archivedAt   DateTime?      @db.Timestamptz(3)
+  schedule     HabitSchedule?
+  entries      HabitEntry[]
+  createdAt    DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime       @updatedAt @db.Timestamptz(3)
+
+  @@index([userId, archivedAt])
+  @@unique([userId, legacySourceId])
+}
+
+model HabitSchedule {
+  id           String            @id @default(uuid()) @db.Uuid
+  habitId      String            @unique @db.Uuid
+  habit        Habit             @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  type         HabitScheduleType
+  weekdays     Int[]             @default([])
+  timesPerWeek Int?
+  intervalDays Int?
+  startDate    DateTime          @db.Date
+  endDate      DateTime?         @db.Date
+  createdAt    DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime          @updatedAt @db.Timestamptz(3)
+}
+
+model HabitEntry {
+  id        String           @id @default(uuid()) @db.Uuid
+  habitId   String           @db.Uuid
+  habit     Habit            @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date      DateTime         @db.Date
+  value     Decimal?         @db.Decimal(12, 3)
+  status    HabitEntryStatus
+  note      String?          @db.VarChar(500)
+  createdAt DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@unique([habitId, date])
+  @@index([habitId, date])
+}
