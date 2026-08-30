@@ -6,9 +6,13 @@
 .cache
 dist
 
-# Node dependencies
+# Node dependencies and generated clients
 node_modules
 server/generated/prisma
+
+# Test artifacts
+playwright-report
+test-results
 
 # Logs
 logs

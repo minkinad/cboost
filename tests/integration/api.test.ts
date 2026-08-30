@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { fetch as nuxtFetch, setup } from '@nuxt/test-utils/e2e'
-import type { HabitEntryResponse, HabitResponse, LegacyImportResponse } from '../../shared/contracts/habits'
+import type { HabitEntryResponse, HabitResponse, HabitsResponse, LegacyImportResponse } from '../../shared/contracts/habits'
+import type { AnalyticsOverviewResponse } from '../../shared/contracts/analytics'
+import type { CategoryResponse, GoalResponse } from '../../shared/contracts/organization'
 import { disconnectPrisma, usePrisma } from '../../server/utils/prisma'
 
 const databaseUrl = 'postgresql://dailyboost:dailyboost@localhost:5432/dailyboost?schema=public'
@@ -131,6 +133,39 @@ describe('authenticated habits API', () => {
     expect(secondRegistration.status).toBe(201)
     const otherCookie = cookieFrom(secondRegistration)
 
+    const categoryResponse = await request('/api/categories', {
+      method: 'POST',
+      cookie: ownerCookie,
+      body: { name: 'Health', color: '#315c4c' }
+    })
+    expect(categoryResponse.status).toBe(201)
+    const category = ((await categoryResponse.json()) as CategoryResponse).category
+    expect((await request(`/api/habits/${habit.id}`, { method: 'PATCH', cookie: ownerCookie, body: { categoryId: category.id } })).status).toBe(200)
+    expect((await request('/api/categories', { cookie: otherCookie }).then(response => response.json()))).toEqual({ categories: [] })
+
+    const foreignCategory = await request('/api/habits', {
+      method: 'POST',
+      cookie: otherCookie,
+      body: { title: 'IDOR category', trackingType: 'BOOLEAN', categoryId: category.id, schedule: { type: 'EVERY_DAY', weekdays: [], startDate: '2026-08-01' } }
+    })
+    expect(foreignCategory.status).toBe(404)
+
+    const goalResponse = await request('/api/goals', {
+      method: 'POST',
+      cookie: ownerCookie,
+      body: { title: 'Fitness', habits: [{ habitId: habit.id, weight: 2 }] }
+    })
+    expect(goalResponse.status).toBe(201)
+    const goal = ((await goalResponse.json()) as GoalResponse).goal
+    expect(goal.habits).toHaveLength(1)
+    expect((await request('/api/goals', { method: 'POST', cookie: otherCookie, body: { title: 'IDOR goal', habits: [{ habitId: habit.id, weight: 1 }] } })).status).toBe(404)
+
+    const analyticsResponse = await request('/api/analytics/overview', { cookie: ownerCookie })
+    expect(analyticsResponse.status).toBe(200)
+    const analytics = (await analyticsResponse.json()) as AnalyticsOverviewResponse
+    expect(analytics.goals.find(candidate => candidate.goalId === goal.id)?.progress).toBeTypeOf('number')
+    expect(analytics.heatmap).toHaveLength(90)
+
     expect((await request(`/api/habits/${habit.id}`, { cookie: otherCookie })).status).toBe(404)
     expect((await request(`/api/habits/${habit.id}`, { method: 'PATCH', cookie: otherCookie, body: { title: 'IDOR' } })).status).toBe(404)
     expect((await request(`/api/habits/${habit.id}`, { method: 'DELETE', cookie: otherCookie })).status).toBe(404)
@@ -176,6 +211,20 @@ describe('authenticated habits API', () => {
       body: { status: 'MISSED' }
     })
     expect(explicitMissed.status).toBe(400)
+
+    const archived = await request(`/api/habits/${habit.id}/archive`, { method: 'POST', cookie: ownerCookie })
+    expect(archived.status).toBe(200)
+    expect(((await archived.json()) as HabitResponse).habit.archivedAt).toBeTruthy()
+
+    const activeHabits = await request('/api/habits', { cookie: ownerCookie })
+    expect(((await activeHabits.json()) as HabitsResponse).habits.some((candidate) => candidate.id === habit.id)).toBe(false)
+
+    const allHabits = await request('/api/habits?includeArchived=true', { cookie: ownerCookie })
+    expect(((await allHabits.json()) as HabitsResponse).habits.some((candidate) => candidate.id === habit.id)).toBe(true)
+
+    const restored = await request(`/api/habits/${habit.id}/restore`, { method: 'POST', cookie: ownerCookie })
+    expect(restored.status).toBe(200)
+    expect(((await restored.json()) as HabitResponse).habit.archivedAt).toBeNull()
 
     const legacyBody = {
       habits: [{
