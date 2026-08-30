@@ -1,12 +1,19 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
+import { registerInputSchema, type RegisterInput } from '~~/shared/schemas/auth'
+
+definePageMeta({ layout: 'auth' })
 
 const { fetch: refreshSession } = useUserSession()
-const form = reactive({
+const form = reactive<RegisterInput>({
   email: '',
   password: '',
   displayName: '',
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+})
+const displayNameModel = computed<string>({
+  get: () => form.displayName ?? '',
+  set: (value) => { form.displayName = value || null }
 })
 const pending = ref(false)
 const errorMessage = ref('')
@@ -18,7 +25,7 @@ async function submit() {
   try {
     await $fetch('/api/auth/register', {
       method: 'POST',
-      body: { ...form, displayName: form.displayName || null }
+      body: registerInputSchema.parse(form)
     })
     await refreshSession()
     await navigateTo('/')
@@ -31,19 +38,17 @@ async function submit() {
 </script>
 
 <template>
-  <main class="auth-shell">
-    <section class="panel-card auth-card">
+  <section class="auth-card">
       <p class="eyebrow">DailyBoost 2.0</p>
       <h1>Регистрация</h1>
-      <form class="habit-form" @submit.prevent="submit">
-        <label>Имя <input v-model="form.displayName" maxlength="80" autocomplete="name"></label>
-        <label>Email <input v-model="form.email" type="email" autocomplete="email" required></label>
-        <label>Пароль <input v-model="form.password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
-        <label>Часовой пояс <input v-model="form.timezone" maxlength="100" required></label>
-        <p v-if="errorMessage" class="error-banner">{{ errorMessage }}</p>
-        <button class="primary-btn" type="submit" :disabled="pending">{{ pending ? 'Создаём…' : 'Создать аккаунт' }}</button>
-      </form>
+      <UForm :schema="registerInputSchema" :state="form" class="habit-form" @submit="submit">
+        <UFormField label="Имя" name="displayName" hint="Необязательно"><UInput v-model="displayNameModel" maxlength="80" autocomplete="name" size="lg" class="w-full" /></UFormField>
+        <UFormField label="Email" name="email" required><UInput v-model="form.email" type="email" autocomplete="email" size="lg" class="w-full" /></UFormField>
+        <UFormField label="Пароль" name="password" hint="Минимум 12 символов" required><UInput v-model="form.password" type="password" minlength="12" maxlength="128" autocomplete="new-password" size="lg" class="w-full" /></UFormField>
+        <UFormField label="Часовой пояс" name="timezone" required><UInput v-model="form.timezone" maxlength="100" size="lg" class="w-full" /></UFormField>
+        <UAlert v-if="errorMessage" color="error" variant="subtle" :description="errorMessage" />
+        <UButton type="submit" size="lg" block :loading="pending">Создать аккаунт</UButton>
+      </UForm>
       <p class="auth-switch">Уже есть аккаунт? <NuxtLink to="/login">Войти</NuxtLink></p>
-    </section>
-  </main>
+  </section>
 </template>

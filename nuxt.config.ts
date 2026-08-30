@@ -2,8 +2,12 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  modules: ['@nuxt/eslint', 'nuxt-auth-utils'],
+  modules: ['@nuxt/eslint', '@nuxt/ui', 'nuxt-auth-utils'],
   css: ['~/assets/styles/main.css'],
+  components: [
+    { path: '~/components', pathPrefix: false },
+    { path: '~/features', pathPrefix: false }
+  ],
   typescript: {
     typeCheck: true,
     tsConfig: {
@@ -24,15 +28,12 @@ export default defineNuxtConfig({
             'Трекер задач и привычек со статистикой за неделю и месяц, мотивационными напоминаниями и современным интерфейсом.'
         }
       ],
-      link: [
-        { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
-        { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
-        {
-          rel: 'stylesheet',
-          href: 'https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Sora:wght@500;600;700&display=swap'
-        }
-      ]
+      link: []
     }
+  },
+  ui: {
+    colorMode: false,
+    fonts: false
   },
   runtimeConfig: {
     session: {

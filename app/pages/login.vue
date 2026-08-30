@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
+import { loginInputSchema, type LoginInput } from '~~/shared/schemas/auth'
+
+definePageMeta({ layout: 'auth' })
 
 const route = useRoute()
 const { fetch: refreshSession } = useUserSession()
-const form = reactive({ email: '', password: '' })
+const form = reactive<LoginInput>({ email: '', password: '' })
 const pending = ref(false)
 const errorMessage = ref('')
 
@@ -25,17 +28,15 @@ async function submit() {
 </script>
 
 <template>
-  <main class="auth-shell">
-    <section class="panel-card auth-card">
+  <section class="auth-card">
       <p class="eyebrow">DailyBoost 2.0</p>
       <h1>Вход</h1>
-      <form class="habit-form" @submit.prevent="submit">
-        <label>Email <input v-model="form.email" type="email" autocomplete="email" required></label>
-        <label>Пароль <input v-model="form.password" type="password" autocomplete="current-password" required></label>
-        <p v-if="errorMessage" class="error-banner">{{ errorMessage }}</p>
-        <button class="primary-btn" type="submit" :disabled="pending">{{ pending ? 'Входим…' : 'Войти' }}</button>
-      </form>
+      <UForm :schema="loginInputSchema" :state="form" class="habit-form" @submit="submit">
+        <UFormField label="Email" name="email" required><UInput v-model="form.email" type="email" autocomplete="email" size="lg" class="w-full" /></UFormField>
+        <UFormField label="Пароль" name="password" required><UInput v-model="form.password" type="password" autocomplete="current-password" size="lg" class="w-full" /></UFormField>
+        <UAlert v-if="errorMessage" color="error" variant="subtle" :description="errorMessage" />
+        <UButton type="submit" size="lg" block :loading="pending">Войти</UButton>
+      </UForm>
       <p class="auth-switch">Нет аккаунта? <NuxtLink to="/register">Зарегистрироваться</NuxtLink></p>
-    </section>
-  </main>
+  </section>
 </template>
