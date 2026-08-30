@@ -6,7 +6,7 @@
 
 ## Habit aggregate
 
-`Habit` belongs to exactly one User (`userId`, cascade delete) and owns one `HabitSchedule` plus many `HabitEntry` records. Tracking types:
+`Habit` belongs to exactly one User (`userId`, cascade delete), optionally belongs to one `Category`, and owns one `HabitSchedule` plus many `HabitEntry` records. Tracking types:
 
 - `BOOLEAN`: `targetValue` is null; entry has no numeric value.
 - `COUNT`, `DURATION`, `QUANTITY`: `targetValue > 0` and a non-empty `unit` are mandatory.
@@ -29,4 +29,14 @@ Numeric statuses are derived from value: zero is pending, below target is partia
 
 ## Ownership and indexes
 
-Habit lookup/update/delete includes both `id` and authenticated `userId`. Entry queries scope through `habit.userId`; services verify ownership before upsert. Cross-user access returns 404. Relevant indexes cover active habits per user and entry date lookup.
+Habit lookup/update/delete includes both `id` and authenticated `userId`. Entry queries scope through `habit.userId`; services verify ownership before upsert. Assigning `categoryId` is accepted only when the category belongs to that same user. Cross-user access returns 404. Relevant indexes cover active habits per user, category membership, and entry date lookup.
+
+## Category
+
+`Category` belongs to one User and stores a per-user unique name plus optional icon and color. Users can create their own taxonomy. Deleting a category sets linked `Habit.categoryId` to null and does not delete habits.
+
+## Goal and GoalHabit
+
+`Goal` belongs to one User and stores title, optional description/target date, and `ACTIVE`, `COMPLETED`, or `ARCHIVED` status. `GoalHabit` is the many-to-many join between Goal and Habit. Its composite primary key prevents duplicate links and its positive decimal `weight` supports deterministic weighted progress.
+
+Goal services verify ownership of the goal and every linked habit. Deleting a goal or habit cascades only its join records; it does not delete the other aggregate.
