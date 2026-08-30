@@ -1,10 +1,14 @@
 import type { SessionUser } from '~~/shared/types/auth'
 import type { HabitDto, HabitEntryDto, HabitScheduleDto } from '~~/shared/types/habits'
+import type { CategoryDto, GoalDto } from '~~/shared/types/organization'
 import { databaseDateToDateKey } from '~~/shared/utils/dates'
 import type {
   Habit as PrismaHabit,
   HabitEntry as PrismaHabitEntry,
   HabitSchedule as PrismaHabitSchedule,
+  Category as PrismaCategory,
+  Goal as PrismaGoal,
+  GoalHabit as PrismaGoalHabit,
   User as PrismaUser
 } from '../../generated/prisma/client'
 import type { UserRecord } from '../user.repository'
@@ -64,6 +68,7 @@ export function mapHabit(
 
   return {
     id: habit.id,
+    categoryId: habit.categoryId,
     title: habit.title,
     description: habit.description,
     trackingType: habit.trackingType,
@@ -76,5 +81,40 @@ export function mapHabit(
     entries: habit.entries?.map(mapEntry),
     createdAt: habit.createdAt.toISOString(),
     updatedAt: habit.updatedAt.toISOString()
+  }
+}
+
+export function mapCategory(category: PrismaCategory): CategoryDto {
+  return {
+    id: category.id,
+    name: category.name,
+    icon: category.icon,
+    color: category.color,
+    createdAt: category.createdAt.toISOString()
+  }
+}
+
+export function mapGoal(
+  goal: PrismaGoal & { habitLinks: Array<PrismaGoalHabit & { habit: PrismaHabit }> }
+): GoalDto {
+  return {
+    id: goal.id,
+    title: goal.title,
+    description: goal.description,
+    targetDate: goal.targetDate ? databaseDateToDateKey(goal.targetDate) : null,
+    status: goal.status,
+    habits: goal.habitLinks.map((link) => ({
+      habitId: link.habitId,
+      weight: Number(link.weight),
+      habit: {
+        id: link.habit.id,
+        title: link.habit.title,
+        color: link.habit.color,
+        icon: link.habit.icon,
+        trackingType: link.habit.trackingType
+      }
+    })),
+    createdAt: goal.createdAt.toISOString(),
+    updatedAt: goal.updatedAt.toISOString()
   }
 }

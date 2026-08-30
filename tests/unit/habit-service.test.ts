@@ -8,12 +8,16 @@ import { HabitService } from '../../server/services/habits/habit.service'
 class InMemoryHabitRepository implements HabitRepository {
   constructor(private habits: Array<HabitDto & { userId: string }>) {}
 
-  async findManyByUserId(userId: string): Promise<HabitDto[]> {
-    return this.habits.filter((habit) => habit.userId === userId)
+  async findManyByUserId(userId: string, includeArchived = false): Promise<HabitDto[]> {
+    return this.habits.filter((habit) => habit.userId === userId && (includeArchived || !habit.archivedAt))
   }
 
   async findByIdForUser(userId: string, habitId: string): Promise<HabitDto | null> {
     return this.habits.find((habit) => habit.userId === userId && habit.id === habitId) ?? null
+  }
+
+  async categoryBelongsToUser(_userId: string, categoryId: string | null | undefined): Promise<boolean> {
+    return categoryId == null
   }
 
   async create(userId: string, input: HabitCreateInput): Promise<HabitDto> {
@@ -40,6 +44,12 @@ class InMemoryHabitRepository implements HabitRepository {
     return { ...current, archivedAt: new Date().toISOString() }
   }
 
+  async restore(userId: string, habitId: string): Promise<HabitDto> {
+    const current = await this.findByIdForUser(userId, habitId)
+    if (!current) throw new Error('missing')
+    return { ...current, archivedAt: null }
+  }
+
   async delete(userId: string, habitId: string): Promise<boolean> {
     const index = this.habits.findIndex((habit) => habit.userId === userId && habit.id === habitId)
     if (index < 0) return false
@@ -59,6 +69,7 @@ function makeHabit(userId = 'user-1', title = 'Чтение'): HabitDto & { user
     unit: null,
     color: '#ff5c3d',
     icon: null,
+    categoryId: null,
     archivedAt: null,
     schedule: {
       id: 'schedule-1',
@@ -85,5 +96,14 @@ describe('HabitService', () => {
   it('hides another user habit behind not-found', async () => {
     const service = new HabitService(new InMemoryHabitRepository([makeHabit('owner')]))
     await expect(service.getHabit('attacker', 'owner-habit')).rejects.toMatchObject<ApplicationError>({ statusCode: 404 })
+  })
+
+  it('restores an archived habit without deleting its history', async () => {
+    const archived = { ...makeHabit('user-1'), archivedAt: '2026-08-28T10:00:00.000Z' }
+    const service = new HabitService(new InMemoryHabitRepository([archived]))
+
+    expect(await service.listHabits('user-1')).toEqual([])
+    expect(await service.listHabits('user-1', true)).toHaveLength(1)
+    await expect(service.restoreHabit('user-1', archived.id)).resolves.toMatchObject({ archivedAt: null })
   })
 })

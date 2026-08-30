@@ -25,6 +25,7 @@ export interface HabitEntryDto {
 
 export interface HabitDto {
   id: string
+  categoryId: string | null
   title: string
   description: string | null
   trackingType: TrackingType

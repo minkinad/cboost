@@ -56,6 +56,7 @@ function habit(overrides: Partial<HabitDto> = {}): HabitDto {
     unit: null,
     color: null,
     icon: null,
+    categoryId: null,
     archivedAt: null,
     schedule: schedule('EVERY_DAY'),
     entries: [],

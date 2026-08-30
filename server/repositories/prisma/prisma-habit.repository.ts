@@ -24,7 +24,8 @@ function habitData(input: HabitCreateInput) {
     targetValue: input.targetValue,
     unit: input.unit,
     color: input.color,
-    icon: input.icon
+    icon: input.icon,
+    categoryId: input.categoryId ?? null
   }
 }
 
@@ -34,6 +35,9 @@ const habitInclude = {
 } as const
 
 export class PrismaHabitRepository implements HabitRepository {
+  async categoryBelongsToUser(userId: string, categoryId: string): Promise<boolean> {
+    return (await usePrisma().category.count({ where: { id: categoryId, userId } })) === 1
+  }
   async findManyByUserId(userId: string, includeArchived = false): Promise<HabitDto[]> {
     const habits = await usePrisma().habit.findMany({
       where: {
@@ -102,6 +106,7 @@ export class PrismaHabitRepository implements HabitRepository {
       unit: current.unit,
       color: current.color,
       icon: current.icon,
+      categoryId: current.categoryId,
       schedule: input
     })
   }
@@ -110,6 +115,15 @@ export class PrismaHabitRepository implements HabitRepository {
     const habit = await usePrisma().habit.update({
       where: { id: habitId, userId },
       data: { archivedAt: new Date() },
+      include: habitInclude
+    })
+    return mapHabit(habit)
+  }
+
+  async restore(userId: string, habitId: string): Promise<HabitDto> {
+    const habit = await usePrisma().habit.update({
+      where: { id: habitId, userId },
+      data: { archivedAt: null },
       include: habitInclude
     })
     return mapHabit(habit)

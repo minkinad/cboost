@@ -70,7 +70,8 @@ const habitFields = {
   targetValue: z.number().finite().positive().max(999_999_999).nullable().optional(),
   unit: optionalText(20),
   color: z.string().trim().regex(/^#[0-9a-f]{6}$/i, 'Ожидается цвет #RRGGBB').nullable().optional(),
-  icon: optionalText(80)
+  icon: optionalText(80),
+  categoryId: z.uuid().nullable().optional()
 } as const
 
 function validateTrackingTarget(
@@ -110,6 +111,7 @@ export const habitUpdateInputSchema = z
     unit: habitFields.unit,
     color: habitFields.color,
     icon: habitFields.icon,
+    categoryId: habitFields.categoryId,
     schedule: habitScheduleInputSchema.optional()
   })
   .strict()

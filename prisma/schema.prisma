@@ -29,6 +29,12 @@ enum HabitEntryStatus {
   MISSED
 }
 
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
 model User {
   id           String   @id @default(uuid()) @db.Uuid
   email        String   @unique @db.VarChar(320)
@@ -36,6 +42,8 @@ model User {
   displayName  String?  @db.VarChar(80)
   timezone     String   @default("UTC") @db.VarChar(100)
   habits       Habit[]
+  categories   Category[]
+  goals        Goal[]
   createdAt    DateTime @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @db.Timestamptz(3)
 }
@@ -44,6 +52,8 @@ model Habit {
   id             String         @id @default(uuid()) @db.Uuid
   userId         String         @db.Uuid
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId     String?        @db.Uuid
+  category       Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   title          String         @db.VarChar(80)
   description    String?        @db.Text
   trackingType   TrackingType   @default(BOOLEAN)
@@ -55,11 +65,53 @@ model Habit {
   archivedAt     DateTime?      @db.Timestamptz(3)
   schedule       HabitSchedule?
   entries        HabitEntry[]
+  goalLinks      GoalHabit[]
   createdAt      DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime       @updatedAt @db.Timestamptz(3)
 
   @@unique([userId, legacySourceId])
   @@index([userId, archivedAt])
+  @@index([categoryId])
+}
+
+model Category {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String   @db.VarChar(60)
+  icon      String?  @db.VarChar(80)
+  color     String?  @db.VarChar(7)
+  habits    Habit[]
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([userId, name])
+  @@index([userId, createdAt])
+}
+
+model Goal {
+  id          String      @id @default(uuid()) @db.Uuid
+  userId      String      @db.Uuid
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String      @db.VarChar(120)
+  description String?     @db.Text
+  targetDate  DateTime?   @db.Date
+  status      GoalStatus  @default(ACTIVE)
+  habitLinks  GoalHabit[]
+  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime    @updatedAt @db.Timestamptz(3)
+
+  @@index([userId, status])
+}
+
+model GoalHabit {
+  goalId  String  @db.Uuid
+  goal    Goal    @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  habitId String  @db.Uuid
+  habit   Habit   @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  weight  Decimal @default(1) @db.Decimal(8, 3)
+
+  @@id([goalId, habitId])
+  @@index([habitId])
 }
 
 model HabitSchedule {

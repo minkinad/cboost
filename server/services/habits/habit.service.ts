@@ -11,8 +11,14 @@ import { habitRepository } from '../../repositories/prisma/prisma-habit.reposito
 export class HabitService {
   constructor(private readonly repository: HabitRepository) {}
 
-  listHabits(userId: string): Promise<HabitDto[]> {
-    return this.repository.findManyByUserId(userId)
+  listHabits(userId: string, includeArchived = false): Promise<HabitDto[]> {
+    return this.repository.findManyByUserId(userId, includeArchived)
+  }
+
+  private async assertCategoryOwnership(userId: string, categoryId: string | null | undefined): Promise<void> {
+    if (categoryId && !await this.repository.categoryBelongsToUser(userId, categoryId)) {
+      throw new ApplicationError('Категория не найдена', 404)
+    }
   }
 
   async getHabit(userId: string, habitId: string): Promise<HabitDto> {
@@ -25,12 +31,14 @@ export class HabitService {
     return habit
   }
 
-  createHabit(userId: string, input: HabitCreateInput): Promise<HabitDto> {
+  async createHabit(userId: string, input: HabitCreateInput): Promise<HabitDto> {
+    await this.assertCategoryOwnership(userId, input.categoryId)
     return this.repository.create(userId, input)
   }
 
   async updateHabit(userId: string, habitId: string, input: HabitUpdateInput): Promise<HabitDto> {
     const current = await this.getHabit(userId, habitId)
+    await this.assertCategoryOwnership(userId, input.categoryId)
     const currentSchedule = {
       type: current.schedule.type,
       weekdays: current.schedule.weekdays,
@@ -47,6 +55,7 @@ export class HabitService {
       unit: input.unit === undefined ? current.unit : input.unit,
       color: input.color === undefined ? current.color : input.color,
       icon: input.icon === undefined ? current.icon : input.icon,
+      categoryId: input.categoryId === undefined ? current.categoryId : input.categoryId,
       schedule: input.schedule ?? currentSchedule
     })
 
@@ -60,6 +69,11 @@ export class HabitService {
   async archiveHabit(userId: string, habitId: string): Promise<HabitDto> {
     await this.getHabit(userId, habitId)
     return this.repository.archive(userId, habitId)
+  }
+
+  async restoreHabit(userId: string, habitId: string): Promise<HabitDto> {
+    await this.getHabit(userId, habitId)
+    return this.repository.restore(userId, habitId)
   }
 
   async deleteHabit(userId: string, habitId: string): Promise<void> {
