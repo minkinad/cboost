@@ -112,6 +112,7 @@ export const habitUpdateInputSchema = z
     color: habitFields.color,
     icon: habitFields.icon,
     categoryId: habitFields.categoryId,
+    expectedUpdatedAt: z.iso.datetime().optional(),
     schedule: habitScheduleInputSchema.optional()
   })
   .strict()
@@ -139,6 +140,13 @@ export const habitEntryParamsSchema = z.object({
   id: z.uuid(),
   date: dateKeySchema
 })
+
+export const habitEntriesQuerySchema = z.object({
+  from: dateKeySchema.optional(),
+  to: dateKeySchema.optional(),
+  cursor: dateKeySchema.optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100)
+}).refine(input => !input.from || !input.to || input.from <= input.to, 'from не может быть позже to')
 
 export const legacyHabitSchema = z
   .object({

@@ -17,9 +17,9 @@ export class HabitEntryService {
     private readonly entries: HabitEntryRepository
   ) {}
 
-  async listEntries(userId: string, habitId: string): Promise<HabitEntryDto[]> {
+  async listEntries(userId: string, habitId: string, options: { from?: string; to?: string; cursor?: string; limit: number }): Promise<{ entries: HabitEntryDto[]; nextCursor: string | null }> {
     await this.requireHabit(userId, habitId)
-    return this.entries.findManyForHabit(userId, habitId)
+    return this.entries.findManyForHabit(userId, habitId, options)
   }
 
   async putEntry(

@@ -10,6 +10,7 @@ export interface HabitResponse {
 
 export interface HabitEntriesResponse {
   entries: HabitEntryDto[]
+  nextCursor: string | null
 }
 
 export interface HabitEntryResponse {

@@ -67,6 +67,7 @@ const intervalDaysModel = computed<number | undefined>({
 
 function resetDraft() {
   Object.assign(state, {
+    expectedUpdatedAt: props.habit.updatedAt,
     title: props.habit.title,
     description: props.habit.description,
     targetValue: props.habit.targetValue,

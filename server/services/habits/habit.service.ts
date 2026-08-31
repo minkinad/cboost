@@ -11,8 +11,8 @@ import { habitRepository } from '../../repositories/prisma/prisma-habit.reposito
 export class HabitService {
   constructor(private readonly repository: HabitRepository) {}
 
-  listHabits(userId: string, includeArchived = false): Promise<HabitDto[]> {
-    return this.repository.findManyByUserId(userId, includeArchived)
+  listHabits(userId: string, includeArchived = false, entryRange?: { from?: string; to?: string }): Promise<HabitDto[]> {
+    return this.repository.findManyByUserId(userId, includeArchived, entryRange)
   }
 
   private async assertCategoryOwnership(userId: string, categoryId: string | null | undefined): Promise<void> {
@@ -31,6 +31,12 @@ export class HabitService {
     return habit
   }
 
+  async getHabitForDisplay(userId: string, habitId: string, entryRange: { from?: string; to?: string }): Promise<HabitDto> {
+    const habit = await this.repository.findByIdForUser(userId, habitId, entryRange)
+    if (!habit) throw new ApplicationError('Привычка не найдена', 404)
+    return habit
+  }
+
   async createHabit(userId: string, input: HabitCreateInput): Promise<HabitDto> {
     await this.assertCategoryOwnership(userId, input.categoryId)
     return this.repository.create(userId, input)
@@ -38,7 +44,11 @@ export class HabitService {
 
   async updateHabit(userId: string, habitId: string, input: HabitUpdateInput): Promise<HabitDto> {
     const current = await this.getHabit(userId, habitId)
-    await this.assertCategoryOwnership(userId, input.categoryId)
+    if (input.expectedUpdatedAt && input.expectedUpdatedAt !== current.updatedAt) {
+      throw new ApplicationError('Привычка была изменена в другой сессии. Обновите данные и повторите.', 409)
+    }
+    const { expectedUpdatedAt: _expectedUpdatedAt, ...changes } = input
+    await this.assertCategoryOwnership(userId, changes.categoryId)
     const currentSchedule = {
       type: current.schedule.type,
       weekdays: current.schedule.weekdays,
@@ -48,15 +58,15 @@ export class HabitService {
       endDate: current.schedule.endDate
     }
     const merged = habitCreateInputSchema.safeParse({
-      title: input.title ?? current.title,
-      description: input.description === undefined ? current.description : input.description,
-      trackingType: input.trackingType ?? current.trackingType,
-      targetValue: input.targetValue === undefined ? current.targetValue : input.targetValue,
-      unit: input.unit === undefined ? current.unit : input.unit,
-      color: input.color === undefined ? current.color : input.color,
-      icon: input.icon === undefined ? current.icon : input.icon,
-      categoryId: input.categoryId === undefined ? current.categoryId : input.categoryId,
-      schedule: input.schedule ?? currentSchedule
+      title: changes.title ?? current.title,
+      description: changes.description === undefined ? current.description : changes.description,
+      trackingType: changes.trackingType ?? current.trackingType,
+      targetValue: changes.targetValue === undefined ? current.targetValue : changes.targetValue,
+      unit: changes.unit === undefined ? current.unit : changes.unit,
+      color: changes.color === undefined ? current.color : changes.color,
+      icon: changes.icon === undefined ? current.icon : changes.icon,
+      categoryId: changes.categoryId === undefined ? current.categoryId : changes.categoryId,
+      schedule: changes.schedule ?? currentSchedule
     })
 
     if (!merged.success) {

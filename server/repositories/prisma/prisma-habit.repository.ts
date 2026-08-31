@@ -29,31 +29,36 @@ function habitData(input: HabitCreateInput) {
   }
 }
 
-const habitInclude = {
-  schedule: true,
-  entries: { orderBy: { date: 'asc' as const } }
-} as const
+function habitInclude(entryRange?: { from?: string; to?: string }) {
+  const date = entryRange && (entryRange.from || entryRange.to)
+    ? {
+        ...(entryRange.from ? { gte: dateKeyToDatabaseDate(entryRange.from) } : {}),
+        ...(entryRange.to ? { lte: dateKeyToDatabaseDate(entryRange.to) } : {})
+      }
+    : undefined
+  return { schedule: true, entries: { where: date ? { date } : undefined, orderBy: { date: 'asc' as const } } } as const
+}
 
 export class PrismaHabitRepository implements HabitRepository {
   async categoryBelongsToUser(userId: string, categoryId: string): Promise<boolean> {
     return (await usePrisma().category.count({ where: { id: categoryId, userId } })) === 1
   }
-  async findManyByUserId(userId: string, includeArchived = false): Promise<HabitDto[]> {
+  async findManyByUserId(userId: string, includeArchived = false, entryRange?: { from?: string; to?: string }): Promise<HabitDto[]> {
     const habits = await usePrisma().habit.findMany({
       where: {
         userId,
         ...(includeArchived ? {} : { archivedAt: null })
       },
-      include: habitInclude,
+      include: habitInclude(entryRange),
       orderBy: { createdAt: 'desc' }
     })
     return habits.map(mapHabit)
   }
 
-  async findByIdForUser(userId: string, habitId: string): Promise<HabitDto | null> {
+  async findByIdForUser(userId: string, habitId: string, entryRange?: { from?: string; to?: string }): Promise<HabitDto | null> {
     const habit = await usePrisma().habit.findFirst({
       where: { id: habitId, userId },
-      include: habitInclude
+      include: habitInclude(entryRange)
     })
     return habit ? mapHabit(habit) : null
   }
@@ -65,7 +70,7 @@ export class PrismaHabitRepository implements HabitRepository {
         ...habitData(input),
         schedule: { create: scheduleData(input.schedule) }
       },
-      include: habitInclude
+      include: habitInclude()
     })
     return mapHabit(habit)
   }
@@ -86,7 +91,7 @@ export class PrismaHabitRepository implements HabitRepository {
             }
           : {})
       },
-      include: habitInclude
+      include: habitInclude()
     })
     return mapHabit(habit)
   }
@@ -115,7 +120,7 @@ export class PrismaHabitRepository implements HabitRepository {
     const habit = await usePrisma().habit.update({
       where: { id: habitId, userId },
       data: { archivedAt: new Date() },
-      include: habitInclude
+      include: habitInclude()
     })
     return mapHabit(habit)
   }
@@ -124,7 +129,7 @@ export class PrismaHabitRepository implements HabitRepository {
     const habit = await usePrisma().habit.update({
       where: { id: habitId, userId },
       data: { archivedAt: null },
-      include: habitInclude
+      include: habitInclude()
     })
     return mapHabit(habit)
   }

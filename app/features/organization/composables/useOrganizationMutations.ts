@@ -20,7 +20,7 @@ export function useOrganizationMutations() {
     onError: () => toast.add({ title: 'Не удалось создать категорию', color: 'error' })
   })
   const deleteCategory = useMutation({
-    mutationFn: (id: string) => $fetch(`/api/categories/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => $fetch<unknown>(`/api/categories/${id}` as string, { method: 'DELETE' }),
     onSuccess: () => { refreshCategories(); void queryClient.invalidateQueries({ queryKey: habitQueryKeys.all }); toast.add({ title: 'Категория удалена' }) },
     onError: () => toast.add({ title: 'Не удалось удалить категорию', color: 'error' })
   })
@@ -35,7 +35,7 @@ export function useOrganizationMutations() {
     onError: () => toast.add({ title: 'Не удалось обновить цель', color: 'error' })
   })
   const deleteGoal = useMutation({
-    mutationFn: (id: string) => $fetch(`/api/goals/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => $fetch<unknown>(`/api/goals/${id}` as string, { method: 'DELETE' }),
     onSuccess: () => { refreshGoals(); toast.add({ title: 'Цель удалена' }) },
     onError: () => toast.add({ title: 'Не удалось удалить цель', color: 'error' })
   })
