@@ -23,6 +23,7 @@ async function logout() {
 
 <template>
   <div class="app-shell">
+    <PwaLifecycle />
     <aside class="desktop-sidebar">
       <NuxtLink class="app-brand" to="/" aria-label="DailyBoost — сегодня">
         <span class="brand-mark">D</span>
@@ -59,6 +60,7 @@ async function logout() {
           />
         </UTooltip>
       </div>
+      <SyncStatusIndicator />
     </aside>
 
     <div class="app-main">
@@ -67,6 +69,7 @@ async function logout() {
           <span class="brand-mark">D</span>
           <span>DailyBoost</span>
         </NuxtLink>
+        <SyncStatusIndicator />
         <UTooltip text="Выйти">
           <UButton icon="i-lucide-log-out" color="neutral" variant="ghost" aria-label="Выйти из аккаунта" @click="logout" />
         </UTooltip>

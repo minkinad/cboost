@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">DailyBoost</title>
+  <rect width="512" height="512" rx="112" fill="#315c4c"/>
+  <path fill="#fff" d="M151 116h105c96 0 157 52 157 140s-61 140-157 140H151V116Zm101 211c49 0 79-26 79-71s-30-71-79-71h-20v142h20Z"/>
+</svg>

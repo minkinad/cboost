@@ -1,7 +1,9 @@
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 
-export default defineNuxtPlugin((nuxtApp) => {
-  const queryClient = new QueryClient({
+export default defineNuxtPlugin({
+  name: 'vue-query',
+  setup(nuxtApp) {
+    const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
         staleTime: 30_000,
@@ -15,5 +17,6 @@ export default defineNuxtPlugin((nuxtApp) => {
     }
   })
 
-  nuxtApp.vueApp.use(VueQueryPlugin, { queryClient })
+    nuxtApp.vueApp.use(VueQueryPlugin, { queryClient })
+  }
 })

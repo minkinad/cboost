@@ -4,6 +4,7 @@ import { calculateEntryStatus } from '~~/shared/domain/habits'
 import type { HabitCreateInput, HabitEntryPutInput, HabitUpdateInput } from '~~/shared/schemas/habits'
 import type { HabitDto, HabitEntryDto } from '~~/shared/types/habits'
 import { analyticsQueryKeys } from '../../progress/composables/useAnalyticsQueries'
+import { useOfflineSync } from '../../sync/composables/useOfflineSync'
 import { habitQueryKeys } from './useHabitQueries'
 
 interface EntryMutationVariables {
@@ -20,6 +21,10 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
+function hasHttpResponse(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && 'response' in error && (error as { response?: unknown }).response)
+}
+
 function replaceEntry(habit: HabitDto, entry: HabitEntryDto): HabitDto {
   const entries = habit.entries ?? []
   const exists = entries.some((candidate) => candidate.date === entry.date)
@@ -34,6 +39,7 @@ function replaceEntry(habit: HabitDto, entry: HabitEntryDto): HabitDto {
 export function useHabitMutations() {
   const queryClient = useQueryClient()
   const toast = useToast()
+  const offlineSync = useOfflineSync()
 
   function invalidateAnalytics() {
     void queryClient.invalidateQueries({ queryKey: analyticsQueryKeys.all })
@@ -59,10 +65,23 @@ export function useHabitMutations() {
 
   const entryMutation = useMutation({
     mutationFn: async ({ habitId, date, input }: EntryMutationVariables) => {
-      return await $fetch<HabitEntryResponse>(`/api/habits/${habitId}/entries/${date}`, {
-        method: 'PUT',
-        body: input
-      })
+      if (!offlineSync.online.value) {
+        await offlineSync.enqueueEntry(habitId, date, input)
+        return { offline: true as const }
+      }
+      offlineSync.setSaving()
+      try {
+        const response = await $fetch<HabitEntryResponse>(`/api/habits/${habitId}/entries/${date}`, { method: 'PUT', body: input })
+        offlineSync.setSynced()
+        return { offline: false as const, entry: response.entry }
+      } catch (error) {
+        if (!offlineSync.online.value || !hasHttpResponse(error)) {
+          await offlineSync.enqueueEntry(habitId, date, input)
+          return { offline: true as const }
+        }
+        offlineSync.setFailed()
+        throw error
+      }
     },
     onMutate: async (variables) => {
       await queryClient.cancelQueries({ queryKey: habitQueryKeys.all })
@@ -105,11 +124,13 @@ export function useHabitMutations() {
         color: 'error'
       })
     },
-    onSuccess: ({ entry }, variables) => {
+    onSuccess: (result, variables) => {
+      if (result.offline) return
       const habit = findCachedHabit(variables.habitId)
-      if (habit) updateHabitCaches(replaceEntry(habit, entry))
+      if (habit) updateHabitCaches(replaceEntry(habit, result.entry))
     },
-    onSettled: (_data, _error, variables) => {
+    onSettled: (data, _error, variables) => {
+      if (data?.offline) return
       void queryClient.invalidateQueries({ queryKey: habitQueryKeys.all })
       void queryClient.invalidateQueries({ queryKey: habitQueryKeys.detail(variables.habitId) })
       invalidateAnalytics()
