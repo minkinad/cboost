@@ -3,10 +3,12 @@ import { fetch as nuxtFetch, setup } from '@nuxt/test-utils/e2e'
 import type { HabitEntryResponse, HabitResponse, HabitsResponse, LegacyImportResponse } from '../../shared/contracts/habits'
 import type { AnalyticsOverviewResponse } from '../../shared/contracts/analytics'
 import type { CategoryResponse, GoalResponse } from '../../shared/contracts/organization'
+import type { ReminderResponse } from '../../shared/contracts/reminders'
 import { disconnectPrisma, usePrisma } from '../../server/utils/prisma'
 
 const databaseUrl = 'postgresql://dailyboost:dailyboost@localhost:5432/dailyboost?schema=public'
 const sessionPassword = 'dailyboost-integration-session-secret-at-least-thirty-two-characters'
+process.env.DATABASE_URL ??= databaseUrl
 
 await setup({
   rootDir: process.cwd(),
@@ -29,13 +31,14 @@ function cookieFrom(response: Response): string {
 
 async function request(
   path: string,
-  options: { method?: string; body?: unknown; cookie?: string } = {}
+  options: { method?: string; body?: unknown; cookie?: string; origin?: string } = {}
 ): Promise<Response> {
   return nuxtFetch(path, {
     method: options.method,
     headers: {
       ...(options.body ? { 'content-type': 'application/json' } : {}),
-      ...(options.cookie ? { cookie: options.cookie } : {})
+      ...(options.cookie ? { cookie: options.cookie } : {}),
+      ...(options.origin ? { origin: options.origin } : {})
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
     redirect: 'manual'
@@ -110,6 +113,18 @@ describe('authenticated habits API', () => {
     expect(created.status).toBe(201)
     const habit = (await created.json() as HabitResponse).habit
 
+    const rejectedOrigin = await request('/api/habits', {
+      method: 'POST',
+      cookie: ownerCookie,
+      origin: 'https://attacker.example',
+      body: {
+        title: 'CSRF attempt',
+        trackingType: 'BOOLEAN',
+        schedule: { type: 'EVERY_DAY', weekdays: [], startDate: '2026-08-01' }
+      }
+    })
+    expect(rejectedOrigin.status).toBe(403)
+
     const ownHabit = await request(`/api/habits/${habit.id}`, { cookie: ownerCookie })
     expect(ownHabit.status).toBe(200)
     expect(((await ownHabit.json()) as HabitResponse).habit.id).toBe(habit.id)
@@ -121,6 +136,13 @@ describe('authenticated habits API', () => {
     })
     expect(updated.status).toBe(200)
     expect(((await updated.json()) as HabitResponse).habit.title).toBe('Отжимания утром')
+
+    const staleUpdate = await request(`/api/habits/${habit.id}`, {
+      method: 'PATCH',
+      cookie: ownerCookie,
+      body: { title: 'Устаревшая запись', expectedUpdatedAt: habit.updatedAt }
+    })
+    expect(staleUpdate.status).toBe(409)
 
     const secondRegistration = await request('/api/auth/register', {
       method: 'POST',
@@ -171,6 +193,18 @@ describe('authenticated habits API', () => {
     expect((await request(`/api/habits/${habit.id}`, { method: 'DELETE', cookie: otherCookie })).status).toBe(404)
     expect((await request(`/api/habits/${habit.id}/entries/2026-08-28`, { method: 'PUT', cookie: otherCookie, body: { value: 10 } })).status).toBe(404)
 
+    const reminderResponse = await request(`/api/habits/${habit.id}/reminders`, {
+      method: 'POST',
+      cookie: ownerCookie,
+      body: { time: '08:30', timezone: 'Europe/Moscow', enabled: true }
+    })
+    expect(reminderResponse.status).toBe(201)
+    const reminder = ((await reminderResponse.json()) as ReminderResponse).reminder
+    expect(reminder).toMatchObject({ habitId: habit.id, time: '08:30', timezone: 'Europe/Moscow', enabled: true })
+    expect((await request(`/api/habits/${habit.id}/reminders`, { method: 'POST', cookie: otherCookie, body: { time: '09:00', timezone: 'UTC' } })).status).toBe(404)
+    expect((await request(`/api/reminders/${reminder.id}`, { method: 'PATCH', cookie: otherCookie, body: { enabled: false } })).status).toBe(404)
+    expect((await request(`/api/reminders/${reminder.id}`, { method: 'DELETE', cookie: otherCookie })).status).toBe(404)
+
     const firstEntry = await request(`/api/habits/${habit.id}/entries/2026-08-28`, {
       method: 'PUT',
       cookie: ownerCookie,
@@ -188,10 +222,23 @@ describe('authenticated habits API', () => {
     const updatedEntry = ((await secondEntry.json()) as HabitEntryResponse).entry
     expect(updatedEntry.status).toBe('COMPLETED')
 
-    const entries = await request(`/api/habits/${habit.id}/entries`, { cookie: ownerCookie })
+    const olderEntry = await request(`/api/habits/${habit.id}/entries/2026-08-27`, {
+      method: 'PUT',
+      cookie: ownerCookie,
+      body: { value: 2 }
+    })
+    expect(olderEntry.status).toBe(200)
+
+    const entries = await request(`/api/habits/${habit.id}/entries?limit=1`, { cookie: ownerCookie })
     const entriesBody = await entries.json()
     expect(entriesBody.entries).toHaveLength(1)
     expect(entriesBody.entries[0].id).toBe(updatedEntry.id)
+    expect(entriesBody.nextCursor).toBe('2026-08-28')
+
+    const nextEntries = await request(`/api/habits/${habit.id}/entries?limit=1&cursor=${entriesBody.nextCursor}`, { cookie: ownerCookie })
+    const nextEntriesBody = await nextEntries.json()
+    expect(nextEntriesBody.entries).toHaveLength(1)
+    expect(nextEntriesBody.entries[0].date).toBe('2026-08-27')
 
     const skippedEntry = await request(`/api/habits/${habit.id}/entries/2026-08-28`, {
       method: 'PUT',

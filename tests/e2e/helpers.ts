@@ -1,5 +1,7 @@
 import { expect, type Page } from '@playwright/test'
 
+let registrationSequence = 0
+
 export interface TestAccount {
   email: string
   password: string
@@ -18,7 +20,9 @@ export async function gotoHydrated(page: Page, path: string) {
 }
 
 export async function register(page: Page, account: TestAccount) {
+  registrationSequence += 1
   const response = await page.request.post('/api/auth/register', {
+    headers: { 'x-forwarded-for': `198.51.100.${registrationSequence}` },
     data: {
       ...account,
       displayName: 'Playwright User',

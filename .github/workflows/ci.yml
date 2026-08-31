@@ -3,6 +3,7 @@ name: DailyBoost CI
 on:
   push:
     branches: ['main', 'master']
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -11,9 +12,10 @@ permissions:
 env:
   DATABASE_URL: postgresql://dailyboost:dailyboost@localhost:5432/dailyboost?schema=public
   NUXT_SESSION_PASSWORD: ci-session-password-at-least-thirty-two-characters-long
+  APP_ORIGIN: http://127.0.0.1:3000
 
 jobs:
-  build:
+  quality:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -36,11 +38,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.15.0
           cache: npm
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Apply database migrations
         run: npm run db:migrate:deploy
@@ -51,8 +56,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Tests
+      - name: Unit and integration tests
         run: npm test
 
       - name: Production build
         run: npm run build
+
+      - name: Browser tests
+        run: npm run test:e2e

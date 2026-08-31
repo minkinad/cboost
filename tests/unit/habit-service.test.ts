@@ -106,4 +106,11 @@ describe('HabitService', () => {
     expect(await service.listHabits('user-1', true)).toHaveLength(1)
     await expect(service.restoreHabit('user-1', archived.id)).resolves.toMatchObject({ archivedAt: null })
   })
+
+  it('rejects a stale habit update using updatedAt as a simple conflict token', async () => {
+    const current = makeHabit('user-1')
+    const service = new HabitService(new InMemoryHabitRepository([current]))
+    await expect(service.updateHabit('user-1', current.id, { title: 'Stale', expectedUpdatedAt: '2026-08-02T10:00:00.000Z' }))
+      .rejects.toMatchObject<ApplicationError>({ statusCode: 409 })
+  })
 })
