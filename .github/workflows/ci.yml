@@ -1,4 +1,4 @@
-name: DailyBoost CI
+name: dailyboost CI
 
 on:
   push:
