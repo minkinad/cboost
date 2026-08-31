@@ -1,56 +1,81 @@
-# DailyBoost 2.0 — architecture
+# DailyBoost architecture
 
-DailyBoost — full-stack modular monolith на Nuxt 4/Nitro. PostgreSQL является единственным canonical storage; статическая GitHub Pages-сборка и fallback в localStorage больше не поддерживаются.
+DailyBoost is a server-rendered modular monolith. PostgreSQL is the canonical store; Nuxt provides the Vue application, Nitro HTTP boundary, and production Node server.
 
-## Поток запроса
+## Runtime overview
 
-```text
-Vue page/composable
-  -> Nitro API route (session, Zod, HTTP)
-    -> application service (use case, ownership)
-      -> pure domain rule
-        -> repository interface
-          -> Prisma adapter
-            -> PostgreSQL
+```mermaid
+flowchart TB
+  subgraph Browser
+    UI[Vue feature components]
+    TQ[TanStack Query cache]
+    IQ[IndexedDB pending entry queue]
+    PWA[Service worker + precached shell]
+    NOTIFY[Notification API]
+    UI --> TQ
+    UI --> IQ
+    PWA --> UI
+    NOTIFY --> UI
+  end
+
+  subgraph NuxtNode[Nuxt / Nitro node server]
+    MW[Session, origin check, headers, rate limit]
+    API[Validated API routes]
+    APP[Application services]
+    DOM[Pure habit and analytics domains]
+    REPO[Repository ports]
+    PRISMA[Prisma adapters]
+    MW --> API --> APP
+    APP --> DOM
+    APP --> REPO --> PRISMA
+  end
+
+  TQ --> API
+  IQ -->|ordered replay| API
+  PRISMA --> PG[(PostgreSQL)]
 ```
 
-Prisma разрешён только в `server/repositories/prisma` и `server/utils/prisma.ts`. API routes не выполняют запросы к БД напрямую. Domain-модули не зависят от Nuxt, Nitro или Prisma.
+## Code boundaries
 
-## Реализованные границы
+- `app/features`: feature UI, query composables, optimistic updates, and presentation only.
+- `shared/domain` and `server/domain`: framework-independent business rules.
+- `shared/schemas` and `shared/contracts`: Zod inputs and stable response DTOs shared by browser/server.
+- `server/api`: authentication, parameter/body validation, HTTP status mapping.
+- `server/services`: use-case orchestration, ownership, and conflicts.
+- `server/repositories`: persistence interfaces.
+- `server/repositories/prisma`: the only normal Prisma query implementation.
+- `prisma/migrations`: reviewed database history; `db push` is not a deployment workflow.
 
-- `shared/schemas`: единые Zod-контракты auth, habits, schedules, entries и legacy import.
-- `server/api`: resource-oriented HTTP API.
-- `server/services`: orchestration и единообразные application errors.
-- `server/domain`: вычисление статуса entry, календаря расписания и mapping legacy data.
-- `server/repositories`: интерфейсы; Prisma-адаптеры всегда принимают authenticated `userId` для чтения/изменения пользовательских ресурсов.
-- `prisma/migrations`: единственная история изменений схемы. `prisma db push` не используется.
-
-HabitSchedule является частью aggregate Habit: отдельного публичного schedule endpoint пока нет, а изменение schedule проходит через owner-scoped `PATCH /api/habits/:id`. HabitEntry также сначала проверяет доступ к Habit и возвращает 404 для чужого ID, не раскрывая существование ресурса.
-
-## API
-
-Успешные resource responses имеют форму `{ habit }`, `{ habits }`, `{ entry }`, `{ entries }` или отчёт импорта. Ошибки используют стандартный Nitro JSON error с HTTP status и `statusMessage`; Zod validation возвращает 400, domain conflicts — 409/422, отсутствие или чужой ресурс — 404.
-
-```text
-POST   /api/auth/register
-POST   /api/auth/login
-POST   /api/auth/logout
-GET    /api/auth/session
-
-GET    /api/habits
-POST   /api/habits
-GET    /api/habits/:id
-PATCH  /api/habits/:id
-DELETE /api/habits/:id
-POST   /api/habits/:id/archive
-GET    /api/habits/:id/entries
-PUT    /api/habits/:id/entries/:date
-
-POST   /api/legacy/import
+```mermaid
+flowchart LR
+  Vue --> Contracts
+  Vue --> Query[Query composables]
+  Query --> Routes[server/api]
+  Routes --> Services[server/services]
+  Services --> Domain[shared/domain + server/domain]
+  Services --> Ports[repository interfaces]
+  Ports --> Adapters[Prisma adapters]
+  Adapters --> Database[(PostgreSQL)]
 ```
 
-## Runtime and delivery
+The dependency direction is inward: pure domains do not import Nuxt, Vue, H3, Prisma, or browser APIs. Vue templates do not recalculate statuses, schedules, streaks, or analytics.
 
-Production requires Node 24.15+, PostgreSQL, `DATABASE_URL` and a stable high-entropy `NUXT_SESSION_PASSWORD`. Deployment runs `prisma migrate deploy` before starting the application. CI starts a real PostgreSQL service, applies migrations, and runs lint, typecheck, unit/integration tests and production build.
+## Request and ownership model
 
-TanStack Query migration, Goals, Analytics 2.0, PWA and AI remain outside this stage.
+Every private API route requires a sealed cookie session. Routes validate Zod input, then pass the authenticated `user.id` to a service. Owned queries filter by both resource ID and user ownership, directly or through the owning Habit; another user's valid UUID is indistinguishable from a missing resource and returns 404.
+
+HabitSchedule is part of the Habit aggregate. HabitEntry and HabitReminder operations first prove Habit ownership. Categories and every habit linked to a Goal must belong to the same user.
+
+## Client data flow
+
+TanStack Query owns server-state caching. Mutations optimistically update the narrow habit cache and invalidate habit/analytics keys only where derived data can change. Normal habit endpoints include a bounded 120-day entry window. Long entry history uses date filters and cursor pagination. Analytics is aggregated by two server endpoints rather than one request per habit.
+
+Only entry PUTs can be queued offline. Queue items retain the exact validated payload and deterministic habit/date identity, and are deleted after server confirmation. Details are in [OFFLINE_SYNC.md](OFFLINE_SYNC.md).
+
+## PWA boundary
+
+Workbox precaches versioned assets plus the offline shell. Authenticated rendered pages and API responses are deliberately not runtime-cached, preventing stale private payloads from being exposed after logout. The service worker handles installability and updates; PostgreSQL-backed data still requires the API except for explicitly queued mutations.
+
+## Deployment
+
+The supported target is a persistent Node server (`nuxt build`, then `.output/server/index.mjs`) with PostgreSQL. Static generation is unsupported because authenticated Nitro APIs are required. Production applies committed migrations before application rollout and supplies HTTPS, a stable session secret, and the exact `APP_ORIGIN`.

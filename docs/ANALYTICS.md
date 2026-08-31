@@ -45,3 +45,7 @@ Stable title/weekday sorting resolves ties, so the same dataset always produces 
 ## Application boundary and performance
 
 `GET /api/analytics/overview` loads the user's habits and goals in two aggregate repository calls and returns all progress-page data. `GET /api/analytics/habits/:id` returns one owned habit's analytics. Vue components render these DTOs and do not reproduce domain calculations.
+
+Normal habit list/detail responses bound included entries to the last 120 user-calendar days. The dedicated history endpoint supports `from`, `to`, descending date cursor, and a maximum page size of 500. Exact all-time best streak currently requires full owned entry history inside the analytics aggregate; this is one bounded scaling concern to measure before introducing snapshots/materialized aggregates.
+
+There is no per-habit HTTP N+1: overview habits and their schedules/entries are loaded together, goals and links are loaded together, and all derived metrics are calculated in one application-service pass. Query invalidation is limited to habits and analytics after entry changes and to the directly affected organization keys for category/goal mutations.

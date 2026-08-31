@@ -26,3 +26,27 @@ Heatmap color reflects the percentage of expected habits completed that day. A d
 Skip is neutral: it is removed from that day's expected denominator and neither grows nor breaks the habit streak. Missed scheduled days remain expected and break a habit streak.
 
 Numeric habit detail pages also show average value, average target achievement, and best day. These use scheduled dates only and are calculated by the server.
+
+## Reminders
+
+Open a habit and add one or more reminder times. Each time uses your current IANA timezone and can be disabled or deleted independently. DailyBoost never asks for notification permission on first visit: press **Разрешить уведомления** explicitly when you want browser notifications.
+
+This version checks reminders while DailyBoost is installed/open. The operating system may throttle a background tab, so it does not promise server push delivery while every application window is closed.
+
+## Install and updates
+
+In a supported browser, use the DailyBoost install banner or the browser's **Install app / Add to Home Screen** action. Android Chromium can install directly; iOS Safari uses Share → Add to Home Screen. The installed application opens in standalone mode.
+
+When a new service worker is ready, DailyBoost shows **Доступна новая версия**. Press **Обновить** to activate it. When the network is unavailable, navigation opens a privacy-safe offline shell instead of a broken server page.
+
+## Offline entry changes
+
+Today's entry controls remain usable after the connection drops. The header/sidebar reports:
+
+- **Saving** while an online request is pending;
+- **Saved offline** when a change is safely queued in this browser;
+- **Syncing** during reconnect replay;
+- **Synced** after server confirmation;
+- **Sync failed** when the command remains queued and needs retry.
+
+Do not clear site data or use another device as proof that a **Saved offline** command reached the server. PostgreSQL becomes authoritative only after **Synced**. Habit editing, goals, categories, reminders, and analytics still require a connection.

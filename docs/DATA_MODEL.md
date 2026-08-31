@@ -1,42 +1,60 @@
 # Data model
 
+## Relationships
+
+```mermaid
+erDiagram
+  User ||--o{ Habit : owns
+  User ||--o{ Category : owns
+  User ||--o{ Goal : owns
+  Category o|--o{ Habit : groups
+  Habit ||--o| HabitSchedule : schedules
+  Habit ||--o{ HabitEntry : records
+  Habit ||--o{ HabitReminder : reminds
+  Goal ||--o{ GoalHabit : includes
+  Habit ||--o{ GoalHabit : supports
+```
+
 ## User
 
-`User` stores normalized unique email, password hash, optional display name, IANA timezone and timezone-aware timestamps. Email normalization is enforced in Zod and by a database check.
+`User` stores normalized unique email, password hash, optional display name, IANA timezone, and timezone-aware timestamps. The timezone defines the stable current calendar date used across tracking and analytics.
 
 ## Habit aggregate
 
-`Habit` belongs to exactly one User (`userId`, cascade delete), optionally belongs to one `Category`, and owns one `HabitSchedule` plus many `HabitEntry` records. Tracking types:
+`Habit` belongs to one User, optionally to one Category, and owns one schedule, many entries, reminders, and goal links. `updatedAt` is an optimistic conflict token: habit PATCH may include `expectedUpdatedAt`, and stale writes return 409. Archive preserves dependent history; hard delete cascades it.
 
-- `BOOLEAN`: `targetValue` is null; entry has no numeric value.
-- `COUNT`, `DURATION`, `QUANTITY`: `targetValue > 0` and a non-empty `unit` are mandatory.
-
-The application lists active habits by default. `archivedAt` preserves history; explicit DELETE remains available and cascades to schedule/entries.
+Tracking types are `BOOLEAN`, `COUNT`, `DURATION`, and `QUANTITY`. Numeric habits require a positive target and unit; Boolean habits have neither.
 
 ## HabitSchedule
 
-Schedule types are `EVERY_DAY`, `WEEKDAYS`, `TIMES_PER_WEEK`, and `INTERVAL`. Weekdays use `0..6` (Sunday through Saturday). Flexible weekly schedules use `timesPerWeek`; interval schedules require `intervalDays`.
-
-`startDate`/`endDate` are PostgreSQL `DATE`. Database checks enforce date order and schedule shape; Zod additionally rejects duplicate weekdays.
+Types are `EVERY_DAY`, `WEEKDAYS`, `TIMES_PER_WEEK`, and `INTERVAL`. Weekdays use `0..6` (Sunday through Saturday); interval days are anchored to `startDate`. PostgreSQL checks and Zod validation enforce schedule shape and date ordering. `habitId` is unique because the relation is one-to-one.
 
 ## HabitEntry
 
-`date` is PostgreSQL `DATE` and travels over HTTP as `YYYY-MM-DD`. It represents the user's local calendar day, not an instant at UTC midnight. Timestamps such as `createdAt` remain `TIMESTAMPTZ`.
+`date` is PostgreSQL `DATE` transported as `YYYY-MM-DD`; it is the user's calendar date, not a UTC instant. `(habitId, date)` is unique and is both the query index and idempotency invariant. Repeated `PUT` uses upsert and changes the same row.
 
-The unique index `(habitId, date)` is the concurrency-safe invariant: two independent records for one habit/day cannot exist. `PUT` uses Prisma upsert, so repeated writes update the same row. Statuses are `PENDING`, `PARTIAL`, `COMPLETED`, `SKIPPED`, and `MISSED`.
+`PENDING`, `PARTIAL`, and `COMPLETED` derive canonically from tracking type/value. `SKIPPED` is explicit. `MISSED` is calculated for past scheduled dates without completion and is not accepted as a manual write.
 
-Numeric statuses are derived from value: zero is pending, below target is partial, and target or above is completed. Skipped/missed entries cannot carry a value. Entries outside the habit schedule are rejected.
+## HabitReminder
 
-## Ownership and indexes
+Each reminder stores its Habit, strict `HH:mm` wall-clock time, IANA timezone, enabled flag, and timestamps. `(habitId, time, timezone)` prevents duplicates. The `(habitId, enabled)` index supports owned reminder listing and active checks. Deleting the Habit cascades reminders.
 
-Habit lookup/update/delete includes both `id` and authenticated `userId`. Entry queries scope through `habit.userId`; services verify ownership before upsert. Assigning `categoryId` is accepted only when the category belongs to that same user. Cross-user access returns 404. Relevant indexes cover active habits per user, category membership, and entry date lookup.
+## Category and goals
 
-## Category
+Category names are unique per user. Deleting one sets linked `Habit.categoryId` to null. Goal has `ACTIVE`, `COMPLETED`, or `ARCHIVED` status. `GoalHabit` is a many-to-many join with a positive decimal weight; its composite primary key prevents duplicate links.
 
-`Category` belongs to one User and stores a per-user unique name plus optional icon and color. Users can create their own taxonomy. Deleting a category sets linked `Habit.categoryId` to null and does not delete habits.
+## Index audit
 
-## Goal and GoalHabit
+Indexes match implemented queries:
 
-`Goal` belongs to one User and stores title, optional description/target date, and `ACTIVE`, `COMPLETED`, or `ARCHIVED` status. `GoalHabit` is the many-to-many join between Goal and Habit. Its composite primary key prevents duplicate links and its positive decimal `weight` supports deterministic weighted progress.
+| Resource | Index | Query pattern |
+| --- | --- | --- |
+| Habit | `(userId, archivedAt)` | active/archived lists for one user |
+| HabitEntry | unique `(habitId, date)` | date upsert, range, descending cursor |
+| HabitSchedule | unique `habitId` | aggregate include |
+| Category | `(userId, createdAt)` and unique `(userId, name)` | owned ordered list/name uniqueness |
+| Goal | `(userId, status)` | owned status list |
+| GoalHabit | PK `(goalId, habitId)`, index `habitId` | goal expansion and reverse cleanup |
+| HabitReminder | unique `(habitId, time, timezone)`, `(habitId, enabled)` | per-habit list and enabled filtering |
 
-Goal services verify ownership of the goal and every linked habit. Deleting a goal or habit cascades only its join records; it does not delete the other aggregate.
+No standalone `Habit.userId` index is added because the composite prefix already supports user filtering. No redundant HabitEntry index is retained because its unique index supports the same left-prefix/date queries.
