@@ -16,6 +16,7 @@
     "generate:pwa-assets": "pwa-assets-generator --preset minimal public/dailyboost-mark.svg",
     "lint": "eslint .",
     "preview": "nuxt preview",
+    "screenshots": "tsx scripts/capture-screenshots.ts",
     "postinstall": "prisma generate && nuxt prepare",
     "test": "vitest run",
     "test:integration": "vitest run tests/integration",
