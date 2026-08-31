@@ -15,5 +15,6 @@ export function toHttpError(error: unknown): Error {
     })
   }
 
-  return error instanceof Error ? error : new Error('Неизвестная ошибка')
+  console.error('Unhandled server error', error)
+  return createError({ statusCode: 500, statusMessage: 'Внутренняя ошибка сервера' })
 }
