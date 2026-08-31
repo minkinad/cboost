@@ -100,6 +100,8 @@ async function remove() {
         <div class="metric-grid"><div class="metric-card"><span>Среднее значение</span><strong>{{ formatNumber(analytics.numeric.averageValue) }} {{ habit.unit }}</strong></div><div class="metric-card"><span>Достижение цели</span><strong>{{ analytics.numeric.averageTargetAchievement }}%</strong></div><div class="metric-card"><span>Лучший день</span><strong>{{ analytics.numeric.bestDay ? `${formatNumber(analytics.numeric.bestDay.value)} ${habit.unit}` : '—' }}</strong><small>{{ analytics.numeric.bestDay?.date || '' }}</small></div></div>
       </section>
 
+      <HabitReminderManager :habit-id="habit.id" :timezone="user?.timezone || 'UTC'" />
+
       <section class="surface-card detail-panel">
         <div class="section-title"><div><h2>Последние записи</h2><p>Недавние изменения прогресса.</p></div></div>
         <div v-if="recentEntries.length" class="entry-list">

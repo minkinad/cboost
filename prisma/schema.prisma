@@ -66,6 +66,7 @@ model Habit {
   schedule       HabitSchedule?
   entries        HabitEntry[]
   goalLinks      GoalHabit[]
+  reminders      HabitReminder[]
   createdAt      DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime       @updatedAt @db.Timestamptz(3)
 
@@ -140,5 +141,18 @@ model HabitEntry {
   updatedAt DateTime         @updatedAt @db.Timestamptz(3)
 
   @@unique([habitId, date])
-  @@index([habitId, date])
+}
+
+model HabitReminder {
+  id        String   @id @default(uuid()) @db.Uuid
+  habitId   String   @db.Uuid
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  time      String   @db.VarChar(5)
+  timezone  String   @db.VarChar(100)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([habitId, time, timezone])
+  @@index([habitId, enabled])
 }
